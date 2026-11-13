@@ -1,0 +1,5 @@
+node_modules/
+lib/
+qr-print/
+service-account*.json
+.env.local
