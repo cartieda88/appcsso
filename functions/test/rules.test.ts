@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import {
   addDays, advanceChallenge, applyActivity, canRegister, creditActivity, dayKey, emptyStats, monthKey, normalizeEmail, parseQr,
-  dueReminders, endOfLocalDay, isPauseTime, qrUrl, PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
+  dueReminders, endOfLocalDay, isPauseTime, mergeCatalog, passportSet, qrUrl, validateActivity, PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
   type ChallengeDef,
 } from '../src/rules';
 
@@ -180,4 +180,29 @@ test('recordatorios de pausa del servidor (web): cada 90 min de 8 a 17, lunes a 
   assert.deepEqual(hits, [false, true, true, false, true, true, false]); // lunes; 09:44 cae en la ventana de 09:30
   assert.equal(isPauseTime(p, local('2026-11-15', '09:30')), false); // domingo
   assert.equal(isPauseTime({ ...p, enabled: false }, local('2026-11-16', '09:30')), false);
+});
+
+test('actividades configurables por Talento Humano', () => {
+  const v = validateActivity({ name: 'Yoga en la terraza', points: 12, maxPerDay: 1, kind: 'qr', passport: false, icon: 'yoga', color: 'pausa' });
+  assert.ok(!('error' in v));
+  if ('error' in v) return;
+  assert.equal(v.id, 'yoga-en-la-terraza');
+  assert.equal(v.rule.points, 12);
+  assert.deepEqual(validateActivity({ name: 'X' }), { error: 'El nombre debe tener entre 3 y 40 caracteres.' });
+  assert.equal((validateActivity({ name: 'Mucho', points: 999 }) as { rule: { points: number } }).rule.points, 100);
+  const cat = mergeCatalog({ [v.id]: v.rule, piscina: { active: false }, gradas: { points: 12 } });
+  assert.equal(cat['yoga-en-la-terraza'].name, 'Yoga en la terraza');
+  assert.equal(cat.gradas.points, 12);
+  assert.equal(cat.gradas.maxPerDay, 2); // conserva lo demás de fábrica
+  assert.deepEqual(passportSet(cat).sort(), ['futbol', 'gimnasio', 'gradas']); // piscina desactivada
+  let s = emptyStats();
+  assert.ok(canRegister(s, 'yoga-en-la-terraza', morning, cat).ok);
+  s = applyActivity(s, 'yoga-en-la-terraza', morning, 12);
+  assert.equal(canRegister(s, 'yoga-en-la-terraza', at('2026-11-13T20:00:00Z'), cat).reason, 'daily-limit');
+  // Pasaporte completo con el conjunto vigente
+  let p = emptyStats(); let got: string[] = [];
+  for (const [i, a] of (['gradas', 'gimnasio', 'futbol'] as const).entries()) {
+    const r = creditActivity(p, a, at(`2026-11-0${i + 2}T15:00:00Z`), 10, passportSet(cat)); p = r.stats; got = got.concat(r.achievements);
+  }
+  assert.deepEqual(got, ['full']);
 });

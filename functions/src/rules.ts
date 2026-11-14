@@ -3,7 +3,8 @@
  * Funciones puras: se prueban en test/rules.test.ts y no dependen de Firebase.
  */
 
-export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol' | 'pausa' | 'pasos';
+/** Identificador de actividad: las de fábrica (gradas, gimnasio…) o las que crea Talento Humano. */
+export type ActivityId = string;
 
 export interface ActivityRule {
   name: string;
@@ -12,20 +13,81 @@ export interface ActivityRule {
   maxPerDay: number;
   /** Minutos mínimos entre dos registros de la misma actividad. */
   cooldownMinutes: number;
+  /** "qr": se registra escaneando un QR en un lugar. "app": se registra dentro de la app (pausa, pasos). */
+  kind?: 'qr' | 'app';
+  /** El sello queda pendiente hasta que un validador lo apruebe (se puede forzar también por QR). */
+  requiresApproval?: boolean;
+  /** Cuenta para el logro "Pasaporte completo" (un sello de cada una en el mes). */
+  passport?: boolean;
+  active?: boolean;
+  /** Ícono y color en la app (de una lista fija). */
+  icon?: string;
+  color?: string;
+  order?: number;
 }
 
-export const ACTIVITIES: Record<ActivityId, ActivityRule> = {
-  gradas: { name: 'Gradas', points: 10, maxPerDay: 2, cooldownMinutes: 60 },
-  gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, cooldownMinutes: 0 },
-  piscina: { name: 'Piscina', points: 15, maxPerDay: 1, cooldownMinutes: 0 },
-  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, cooldownMinutes: 0 },
+export type Catalog = Record<ActivityId, ActivityRule>;
+
+/** Actividades de fábrica. Talento Humano puede editarlas y crear otras en la colección `activities`. */
+export const ACTIVITIES: Catalog = {
+  gradas: { name: 'Gradas', points: 10, maxPerDay: 2, cooldownMinutes: 60, kind: 'qr', passport: true, icon: 'gradas', color: 'gradas', order: 1 },
+  gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', passport: true, icon: 'gimnasio', color: 'gimnasio', order: 2 },
+  piscina: { name: 'Piscina', points: 15, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', passport: true, icon: 'piscina', color: 'piscina', order: 3 },
+  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', passport: true, requiresApproval: true, icon: 'futbol', color: 'futbol', order: 4 },
   // Se registran desde la app, sin QR:
-  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, cooldownMinutes: 60 },
-  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, cooldownMinutes: 0 },
+  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, cooldownMinutes: 60, kind: 'app', passport: false, icon: 'pausa', color: 'pausa', order: 90 },
+  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, cooldownMinutes: 0, kind: 'app', passport: false, icon: 'pasos', color: 'pasos', order: 91 },
 };
 
-/** Actividades con QR en un lugar físico; "Pasaporte completo" pide un sello de cada una. */
+/** Actividades de fábrica con QR; "Pasaporte completo" pide un sello de cada una (más las nuevas marcadas). */
 export const QR_ACTIVITIES: ActivityId[] = ['gradas', 'gimnasio', 'piscina', 'futbol'];
+
+/** Une las actividades de fábrica con las configuradas en Firestore (estas mandan). */
+export function mergeCatalog(stored: Record<string, Partial<ActivityRule>>): Catalog {
+  const out: Catalog = { ...ACTIVITIES };
+  for (const [id, r] of Object.entries(stored)) {
+    const base = out[id] ?? { name: id, points: 10, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr' as const, passport: false };
+    out[id] = { ...base, ...r };
+  }
+  return out;
+}
+
+/** Actividades activas que pide el logro "Pasaporte completo". */
+export const passportSet = (c: Catalog): ActivityId[] =>
+  Object.entries(c).filter(([, r]) => r.active !== false && r.passport === true).map(([id]) => id);
+
+/** Valida los datos de una actividad que crea o edita Talento Humano. */
+export function validateActivity(input: Record<string, unknown>): { id: string; rule: ActivityRule } | { error: string } {
+  const name = String(input.name ?? '').trim();
+  if (name.length < 3 || name.length > 40) return { error: 'El nombre debe tener entre 3 y 40 caracteres.' };
+  const id = String(input.id ?? '').trim() || slugify(name);
+  if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(id)) return { error: 'Identificador no válido.' };
+  const int = (v: unknown, min: number, max: number, def: number) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+  };
+  const points = int(input.points, 1, 100, 10);
+  return {
+    id,
+    rule: {
+      name,
+      points,
+      maxPerDay: int(input.maxPerDay, 1, 10, 1),
+      cooldownMinutes: int(input.cooldownMinutes, 0, 600, 0),
+      kind: input.kind === 'app' ? 'app' : 'qr',
+      requiresApproval: input.requiresApproval === true,
+      passport: input.passport === true,
+      active: input.active !== false,
+      icon: String(input.icon ?? 'star').slice(0, 20),
+      color: String(input.color ?? 'gradas').slice(0, 20),
+      order: int(input.order, 0, 999, 50),
+    },
+  };
+}
+
+export function slugify(s: string) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+}
 
 /* ---------- Pausas activas y pasos ---------- */
 /** Duración mínima de la rutina guiada para que la pausa cuente. */
@@ -35,8 +97,8 @@ export const STEP_GOAL_DEFAULT = 8000;
 /** Tope de pasos aceptados por día (filtra errores del sensor). */
 export const STEPS_MAX_PER_DAY = 70000;
 
-export const isActivityId = (v: unknown): v is ActivityId =>
-  typeof v === 'string' && Object.prototype.hasOwnProperty.call(ACTIVITIES, v);
+export const isActivityId = (v: unknown, catalog: Catalog = ACTIVITIES): v is ActivityId =>
+  typeof v === 'string' && Object.prototype.hasOwnProperty.call(catalog, v) && catalog[v].active !== false;
 
 /** Zona horaria de Netlife (Ecuador continental). */
 export const TIME_ZONE = 'America/Guayaquil';
@@ -125,7 +187,7 @@ export interface UserStats {
 export const PAGE_SIZE = 9;
 export const PASSPORT_ACHIEVEMENTS = {
   page: { title: 'Página completa', description: `${PAGE_SIZE} sellos en un mes`, bonus: 50 },
-  full: { title: 'Pasaporte completo', description: 'Gradas, gimnasio, piscina y fútbol en un mismo mes', bonus: 50 },
+  full: { title: 'Pasaporte completo', description: 'Un sello de cada actividad del pasaporte en un mismo mes', bonus: 50 },
 } as const;
 export type PassportAchievement = keyof typeof PASSPORT_ACHIEVEMENTS;
 
@@ -157,8 +219,8 @@ export interface CheckResult {
 }
 
 /** Valida si la persona puede registrar la actividad en este momento. */
-export function canRegister(stats: UserStats, activity: ActivityId, now: Date): CheckResult {
-  const rule = ACTIVITIES[activity];
+export function canRegister(stats: UserStats, activity: ActivityId, now: Date, catalog: Catalog = ACTIVITIES): CheckResult {
+  const rule = catalog[activity];
   const day = dayKey(now);
   const today = stats.today.day === day ? stats.today : { day, counts: {}, last: {} };
   const count = today.counts[activity] ?? 0;
@@ -207,6 +269,7 @@ export function creditActivity(
   activity: ActivityId,
   at: Date,
   points: number,
+  fullSet: ActivityId[] = QR_ACTIVITIES,
 ): { stats: UserStats; achievements: PassportAchievement[] } {
   const s = clone(prev);
   const day = dayKey(at);
@@ -238,7 +301,7 @@ export function creditActivity(
     s.pagesCompleted += 1;
     achievements.push('page');
   }
-  if (!m.full && QR_ACTIVITIES.every((a) => m.kinds.includes(a))) {
+  if (!m.full && fullSet.length > 0 && fullSet.every((a) => m.kinds.includes(a))) {
     m.full = true;
     s.passportsCompleted += 1;
     achievements.push('full');

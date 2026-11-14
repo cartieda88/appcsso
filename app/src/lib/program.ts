@@ -2,15 +2,21 @@
  * Datos de presentación del programa. Las reglas que valen (puntos, límites)
  * se aplican en el servidor: functions/src/rules.ts. Mantén ambos en sincronía.
  */
-export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol' | 'pausa' | 'pasos';
+/** Id de actividad: las de fábrica o las creadas por Talento Humano (ver lib/catalog.tsx). */
+export type ActivityId = string;
 
-export const ACTIVITIES: Record<ActivityId, { name: string; points: number; maxPerDay: number; rule: string }> = {
-  gradas: { name: 'Gradas', points: 10, maxPerDay: 2, rule: 'Hasta 2 registros al día, con 1 hora entre ellos' },
-  gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, rule: 'Una sesión al día' },
-  piscina: { name: 'Piscina', points: 15, maxPerDay: 1, rule: 'Una sesión al día' },
-  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, rule: 'Un partido del campeonato al día (lo valida la mesa de control)' },
-  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, rule: 'Rutina guiada de 2 min; hasta 4 al día, cada hora' },
-  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, rule: 'Al llegar a la meta diaria de pasos' },
+export interface ActivityDefaults {
+  name: string; points: number; maxPerDay: number; cooldownMinutes: number; kind: 'qr' | 'app';
+  requiresApproval: boolean; passport: boolean; icon: string; color: string; order: number; rule: string;
+}
+/** Actividades de fábrica (mismos valores que functions/src/rules.ts). Talento Humano las edita en Gestión. */
+export const ACTIVITIES: Record<ActivityId, ActivityDefaults> = {
+  gradas: { name: 'Gradas', points: 10, maxPerDay: 2, cooldownMinutes: 60, kind: 'qr', requiresApproval: false, passport: true, icon: 'gradas', color: 'gradas', order: 1, rule: 'Hasta 2 registros al día, con 1 hora entre ellos' },
+  gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', requiresApproval: false, passport: true, icon: 'gimnasio', color: 'gimnasio', order: 2, rule: 'Una sesión al día' },
+  piscina: { name: 'Piscina', points: 15, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', requiresApproval: false, passport: true, icon: 'piscina', color: 'piscina', order: 3, rule: 'Una sesión al día' },
+  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, cooldownMinutes: 0, kind: 'qr', requiresApproval: true, passport: true, icon: 'futbol', color: 'futbol', order: 4, rule: 'Un partido del campeonato al día (lo valida la mesa de control)' },
+  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, cooldownMinutes: 60, kind: 'app', requiresApproval: false, passport: false, icon: 'pausa', color: 'pausa', order: 90, rule: 'Rutina guiada de 2 min; hasta 4 al día, cada hora' },
+  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, cooldownMinutes: 0, kind: 'app', requiresApproval: false, passport: false, icon: 'pasos', color: 'pasos', order: 91, rule: 'Al llegar a la meta diaria de pasos' },
 };
 export const ACTIVITY_IDS = Object.keys(ACTIVITIES) as ActivityId[];
 /** Actividades con QR en un lugar físico (y las que pide "Pasaporte completo"). */

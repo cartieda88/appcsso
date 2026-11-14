@@ -1,4 +1,5 @@
 import { File, Paths } from 'expo-file-system';
+import { useCatalog } from '@/lib/catalog';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -8,7 +9,7 @@ import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
 import { Icon } from '@/components/icon';
 import { Button, Card, Loading, Progress, Row, Screen, Segmented, T } from '@/components/ui';
 import { adminStats, errorMessage, type AdminStats } from '@/lib/api';
-import { ACTIVITIES, ACTIVITY_IDS, relativeDay } from '@/lib/program';
+import { relativeDay } from '@/lib/program';
 import { font, useTheme } from '@/lib/theme';
 
 const monthLabel = (m: string) => {
@@ -18,6 +19,7 @@ const monthLabel = (m: string) => {
 };
 
 export default function Admin() {
+  const cat = useCatalog();
   const t = useTheme();
   const [data, setData] = useState<AdminStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,9 @@ export default function Admin() {
           <Icon name="back" color={t.ink} />
         </Pressable>
         <T v="h2" style={{ flex: 1 }}>Panel Talento Humano</T>
+        <Pressable accessibilityLabel="Gestión" onPress={() => router.push('/gestion')} style={{ width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="gear" color={t.ink} />
+        </Pressable>
       </Row>
       {error ? <Card><T color={t.warn}>{error}</T><Button title="Reintentar" variant="ghost" onPress={load} /></Card> : !data ? <Loading /> : (
         <>
@@ -105,17 +110,18 @@ export default function Admin() {
           <Card>
             <T v="h3">Uso por actividad</T>
             {(() => {
-              const total = ACTIVITY_IDS.reduce((s, a) => s + (data.byActivity[a] ?? 0), 0) || 1;
+              const ids = cat.all.filter((x) => x.active || (data.byActivity[x.id] ?? 0) > 0).map((x) => x.id);
+              const total = ids.reduce((s, a) => s + (data.byActivity[a] ?? 0), 0) || 1;
               return (
                 <>
                   <View style={{ flexDirection: 'row', height: 16, borderRadius: 99, overflow: 'hidden', backgroundColor: t.surface2 }}>
-                    {ACTIVITY_IDS.map((a) => <View key={a} style={{ flex: (data.byActivity[a] ?? 0) / total, backgroundColor: t.act[a] }} />)}
+                    {ids.map((a) => <View key={a} style={{ flex: (data.byActivity[a] ?? 0) / total, backgroundColor: cat.color(t, a) }} />)}
                   </View>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                    {ACTIVITY_IDS.map((a) => (
+                    {ids.map((a) => (
                       <Row key={a} style={{ gap: 6 }}>
-                        <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: t.act[a] }} />
-                        <T v="small">{ACTIVITIES[a].name} {Math.round(((data.byActivity[a] ?? 0) / total) * 100)}% ({data.byActivity[a] ?? 0})</T>
+                        <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: cat.color(t, a) }} />
+                        <T v="small">{cat.get(a).name} {Math.round(((data.byActivity[a] ?? 0) / total) * 100)}% ({data.byActivity[a] ?? 0})</T>
                       </Row>
                     ))}
                   </View>

@@ -57,6 +57,16 @@ export const saveEvent = call<EventInput, { id: string; notified: number }>('sav
 export const cancelEvent = call<{ id: string }, { notified: number }>('cancelEvent');
 export const setAttendance = call<{ eventId: string; going: boolean }, { going: boolean }>('setAttendance');
 
+export interface ActivityInput {
+  id?: string; name: string; points: number; maxPerDay: number; cooldownMinutes: number; kind?: 'qr' | 'app';
+  requiresApproval: boolean; passport: boolean; active: boolean; icon: string; color: string; order?: number;
+}
+export const saveActivity = call<ActivityInput, { id: string }>('saveActivity');
+export const saveQrPoint = call<{ id?: string; activity?: string; location?: string; requiresApproval?: boolean; active?: boolean; rotate?: boolean }, { id: string; token: string }>('saveQrPoint');
+export type Role = 'colaborador' | 'validador' | 'admin';
+export const savePerson = call<{ email: string; name: string; dept: string; employeeId?: string; role: Role; active: boolean }, { email: string; role: Role; active: boolean; hasAccount: boolean }>('savePerson');
+export const saveDepartment = call<{ name: string; headcount: number }, { name: string; headcount: number }>('saveDepartment');
+
 export const adminStats = call<{ month?: string }, AdminStats>('adminStats');
 
 /** Mensaje legible para mostrar al colaborador. */

@@ -39,8 +39,11 @@ service cloud.firestore {
     match /approvals/{id}   { allow read: if isValidator(); allow write: if false; }
 
     // Nunca accesibles desde la app: tokens de QR, códigos de ingreso y nómina.
-    match /qrCodes/{id}    { allow read, write: if false; }
+    // Actividades configurables: todos las ven; solo se cambian con la función saveActivity.
+    match /activities/{id} { allow read: if signedIn(); allow write: if false; }
+    // Tokens de QR y nómina: solo Talento Humano (para imprimir QR y gestionar personas).
+    match /qrCodes/{id}    { allow read: if isAdmin(); allow write: if false; }
+    match /directory/{id}  { allow read: if isAdmin(); allow write: if false; }
     match /loginCodes/{id} { allow read, write: if false; }
-    match /directory/{id}  { allow read, write: if false; }
   }
 }

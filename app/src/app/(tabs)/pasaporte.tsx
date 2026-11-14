@@ -1,4 +1,5 @@
 import * as Sharing from 'expo-sharing';
+import { useCatalog } from '@/lib/catalog';
 import { useRef, useState, type ComponentRef } from 'react';
 import { Modal, Platform, Pressable, View } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
@@ -9,7 +10,7 @@ import { LogrosView } from '@/components/logros-view';
 import { Stamp, StampSlot, stampDate } from '@/components/stamp';
 import { Button, Card, Chip, Loading, Progress, Row, Screen, Segmented, T } from '@/components/ui';
 import { usePassport, type ActivityLog } from '@/lib/data';
-import { ACTIVITIES, ACTIVITY_IDS, dayKey, PAGE_SIZE, PASSPORT_BONUS, QR_ACTIVITY_IDS } from '@/lib/program';
+import { dayKey, PAGE_SIZE, PASSPORT_BONUS } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
@@ -33,6 +34,7 @@ export default function Pasaporte() {
 }
 
 function Sellos() {
+  const cat = useCatalog();
   const t = useTheme();
   const { profile, user } = useSession();
   const now = currentMonth();
@@ -50,7 +52,7 @@ function Sellos() {
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const approved = rows?.filter((r) => r.status === 'approved') ?? [];
   const pending = rows?.filter((r) => r.status === 'pending').length ?? 0;
-  const monthKinds = new Set(approved.filter((r) => QR_ACTIVITY_IDS.includes(r.activity)).map((r) => r.activity)).size;
+  const monthKinds = new Set(approved.filter((r) => cat.passportIds.includes(r.activity)).map((r) => r.activity)).size;
   const monthData = profile?.stats.months?.[`${page.y}-${String(page.m).padStart(2, '0')}`];
 
   async function sharePage() {
@@ -72,7 +74,7 @@ function Sellos() {
   }
 
   const stats = profile?.stats;
-  const kinds = stats ? QR_ACTIVITY_IDS.filter((a) => (stats.counts[a] ?? 0) > 0).length : 0;
+  const kinds = stats ? cat.passportIds.filter((a) => (stats.counts[a] ?? 0) > 0).length : 0;
   const slots = rows ? Math.max(SLOTS_PER_PAGE, Math.ceil(rows.length / 3) * 3) - rows.length : 0;
 
   return (
@@ -90,7 +92,7 @@ function Sellos() {
         <Row style={{ gap: 8 }}>
           {[
             [String(stats?.totalActivities ?? 0), 'sellos'],
-            [`${kinds}/${QR_ACTIVITY_IDS.length}`, 'actividades'],
+            [`${kinds}/${cat.passportIds.length}`, 'actividades'],
             [String(stats?.activeDays ?? 0), 'días activos'],
           ].map(([v, l]) => (
             <View key={l} style={{ flex: 1, backgroundColor: t.heroTile, borderRadius: 14, padding: 10 }}>
@@ -147,9 +149,9 @@ function Sellos() {
               </T>
             ) : (
               <Row style={{ flexWrap: 'wrap', gap: 6 }}>
-                {ACTIVITY_IDS.map((a) => {
+                {cat.all.map((x) => x.id).map((a) => {
                   const n = approved.filter((r) => r.activity === a).length;
-                  return n ? <Chip key={a} label={`${ACTIVITIES[a].name} · ${n}`} /> : null;
+                  return n ? <Chip key={a} label={`${cat.get(a).name} · ${n}`} /> : null;
                 })}
                 {monthData?.page ? <Chip tone="brand" label="Página completa" /> : null}
                 {monthData?.full ? <Chip tone="brand" label="Pasaporte completo" /> : null}
@@ -167,7 +169,7 @@ function Sellos() {
             <T v="h3">Logros del mes</T>
             {[
               { key: 'page', title: 'Página completa', desc: `${PAGE_SIZE} sellos validados en el mes`, value: approved.length, goal: PAGE_SIZE, done: !!monthData?.page },
-              { key: 'full', title: 'Pasaporte completo', desc: 'Gradas, gimnasio, piscina y fútbol en el mes', value: monthKinds, goal: QR_ACTIVITY_IDS.length, done: !!monthData?.full },
+              { key: 'full', title: 'Pasaporte completo', desc: `Un sello de: ${cat.passportIds.map((a) => cat.get(a).name).join(', ')}`, value: monthKinds, goal: cat.passportIds.length, done: !!monthData?.full },
             ].map((g) => (
               <View key={g.key} style={{ gap: 6 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
@@ -195,6 +197,7 @@ const navBtn = (t: ReturnType<typeof useTheme>) => ({
 });
 
 function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () => void }) {
+  const cat = useCatalog();
   const t = useTheme();
   if (!log) return null;
   const { time } = stampDate(log.at);
@@ -206,7 +209,7 @@ function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () =>
           <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
             <Stamp activity={log.activity} at={log.at} number={log.stampNumber} status={log.status} size={190} />
             <T v="label">{log.stampNumber ? `Sello N° ${log.stampNumber}` : 'Sello'}</T>
-            <T v="h2">{ACTIVITIES[log.activity].name}</T>
+            <T v="h2">{cat.get(log.activity).name}</T>
             <View style={{ alignSelf: 'stretch', gap: 8 }}>
               {[
                 ['Fecha', full.charAt(0).toUpperCase() + full.slice(1)],
@@ -215,7 +218,7 @@ function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () =>
                 ['Estado', log.status === 'approved' ? 'Validado' : log.status === 'pending' ? 'Pendiente de validación' : 'No validado'],
                 ...(log.reviewerName ? [['Validó', log.reviewerName]] : []),
                 ...(log.note ? [['Nota', log.note]] : []),
-                ['Puntos', log.status === 'approved' ? `+${log.points + log.bonus}${log.bonus ? ` (incluye bono ${log.bonus})` : ''}` : log.status === 'pending' ? `+${ACTIVITIES[log.activity].points} al validarse` : '0'],
+                ['Puntos', log.status === 'approved' ? `+${log.points + log.bonus}${log.bonus ? ` (incluye bono ${log.bonus})` : ''}` : log.status === 'pending' ? `+${cat.get(log.activity).points} al validarse` : '0'],
               ].map(([k, v]) => (
                 <Row key={k} style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <T v="small">{k}</T>

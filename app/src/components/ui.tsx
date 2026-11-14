@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useCatalog } from '@/lib/catalog';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,7 +18,7 @@ export function Screen({ children, scroll = true }: { children: ReactNode; scrol
 }
 
 type Variant = 'h1' | 'h2' | 'h3' | 'body' | 'small' | 'label' | 'num';
-export function T({ v = 'body', color, style, children, numberOfLines }: { v?: Variant; color?: string; style?: StyleProp<TextStyle>; children: ReactNode; numberOfLines?: number }) {
+export function T({ v = 'body', color, style, children, numberOfLines, selectable }: { v?: Variant; color?: string; style?: StyleProp<TextStyle>; children: ReactNode; numberOfLines?: number; selectable?: boolean }) {
   const t = useTheme();
   const base: Record<Variant, TextStyle> = {
     h1: { fontFamily: font.black, fontSize: 30, lineHeight: 34 },
@@ -28,7 +29,7 @@ export function T({ v = 'body', color, style, children, numberOfLines }: { v?: V
     label: { fontFamily: font.bold, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: t.muted },
     num: { fontFamily: font.extrabold, fontSize: 17, fontVariant: ['tabular-nums'] },
   };
-  return <Text numberOfLines={numberOfLines} style={[{ color: t.ink }, base[v], color ? { color } : null, style]}>{children}</Text>;
+  return <Text selectable={selectable} numberOfLines={numberOfLines} style={[{ color: t.ink }, base[v], color ? { color } : null, style]}>{children}</Text>;
 }
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -76,10 +77,11 @@ export function Progress({ value, color, height = 10 }: { value: number; color?:
 }
 
 export function ActivityDot({ activity, size = 40 }: { activity: ActivityId; size?: number }) {
+  const cat = useCatalog();
   const t = useTheme();
   return (
-    <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: t.act[activity], alignItems: 'center', justifyContent: 'center' }}>
-      <Icon name={activity} color={t.dotInk} size={size * 0.55} />
+    <View style={{ width: size, height: size, borderRadius: 12, backgroundColor: cat.color(t, activity), alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name={cat.get(activity).icon} color={t.dotInk} size={size * 0.55} />
     </View>
   );
 }

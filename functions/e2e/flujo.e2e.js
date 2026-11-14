@@ -225,6 +225,52 @@ async function login(c, email) {
   assert.equal((await logs(`pausa:${day0}`)).length, 1);
   ok('a las 10:15 no se envía (siguiente: 11:00)');
 
+  console.log('Gestión (Talento Humano)');
+  await fails(b.call('saveActivity', { name: 'Yoga' }), /Talento Humano/);
+  ok('un colaborador no puede crear actividades');
+  const yoga = await c.call('saveActivity', { name: 'Yoga', points: 12, maxPerDay: 1, kind: 'qr', icon: 'yoga', color: 'pausa' });
+  assert.equal(yoga.id, 'yoga');
+  await fails(c.call('saveActivity', { name: 'Yoga' }), /Ya existe/);
+  const pt = await c.call('saveQrPoint', { activity: 'yoga', location: 'Terraza · Edificio A' });
+  assert.match(pt.id, /^YOGA-[0-9A-F]{4}$/);
+  ok(`Talento Humano crea la actividad "Yoga" (+12) y su punto QR ${pt.id}`);
+  const qrs = await getDocs(collection(c.db, 'qrCodes'));
+  assert.ok(qrs.size >= 6);
+  ok('Talento Humano puede ver los QR para imprimirlos');
+  const ry = await b.call('registerActivity', { qr: `https://muevete-netlife.web.app/r/${pt.id}/${pt.token}` });
+  assert.equal(ry.activity, 'yoga'); assert.equal(ry.points, 12); assert.equal(ry.activityName, 'Yoga');
+  ok('Carlos escanea el QR de Yoga: +12 y sello de Yoga');
+  const rot = await c.call('saveQrPoint', { id: pt.id, rotate: true });
+  await fails(b.call('registerActivity', { qr: `MUEVETE:${pt.id}:${pt.token}` }), /ya no es válido/);
+  assert.notEqual(rot.token, pt.token);
+  ok('al cambiar la clave del QR, el impreso anterior deja de servir');
+  await c.call('saveActivity', { id: 'yoga', name: 'Yoga', points: 12, active: false });
+  await fails(b.call('registerActivity', { qr: `MUEVETE:${pt.id}:${rot.token}` }), /ya no es válido/);
+  ok('una actividad desactivada ya no registra');
+
+  await fails(b.call('savePerson', { email: 'x@netlife.net.ec', name: 'X', dept: 'Y' }), /Talento Humano/);
+  const np = await c.call('savePerson', { email: 'nueva.persona@netlife.net.ec', name: 'Ana Quishpe', dept: 'Comercial', role: 'validador' });
+  assert.equal(np.hasAccount, false);
+  const n = await client('n');
+  await login(n, 'nueva.persona@netlife.net.ec');
+  const nTok = await n.auth.currentUser.getIdTokenResult();
+  assert.equal(nTok.claims.validator, true);
+  ok('Talento Humano agrega a Ana Quishpe como validadora y ella ya puede ingresar');
+  await c.call('savePerson', { email: 'c.mendez@netlife.net.ec', name: 'Carlos Méndez', dept: 'Logística', role: 'admin' });
+  await b.auth.currentUser.getIdToken(true);
+  assert.equal((await b.auth.currentUser.getIdTokenResult()).claims.admin, true);
+  ok('promueve a Carlos a administrador (se aplica al renovar su sesión)');
+  await fails(c.call('savePerson', { email: 'th.admin@netlife.net.ec', name: 'Paola Andrade', dept: 'Talento Humano', role: 'colaborador' }), /a ti mismo/);
+  ok('nadie puede quitarse a sí mismo el rol de administrador');
+  await c.call('savePerson', { email: 'nueva.persona@netlife.net.ec', name: 'Ana Quishpe', dept: 'Comercial', role: 'colaborador', active: false });
+  await adb.doc('loginCodes/nueva.persona@netlife.net.ec').delete().catch(() => {});
+  await fails(n.call('requestLoginCode', { email: 'nueva.persona@netlife.net.ec' }), /no está registrado/);
+  ok('al dar de baja a una persona ya no puede pedir código');
+  await c.call('saveDepartment', { name: 'Comercial', headcount: 36 });
+  assert.equal((await adb.doc('departments/comercial').get()).get('headcount'), 36);
+  ok('actualiza el número de personas de un departamento');
+  await signOut(n.auth); await deleteApp(n.app);
+
   for (const x of [a, b, c, v]) { await signOut(x.auth); await deleteApp(x.app); }
   console.log('\nTodo OK');
   process.exit(0);

@@ -10,7 +10,7 @@ Tiempo estimado: 1 a 2 horas la primera vez, la mayor parte en configurar Fireba
 
 | Qué | Dónde | Nota |
 |---|---|---|
-| Node.js 22 LTS | https://nodejs.org | Instalar con las opciones por defecto |
+| Node.js 24 LTS | https://nodejs.org | Instalar con las opciones por defecto |
 | Git | https://git-scm.com | |
 | Cuenta de Expo (gratis) | https://expo.dev/signup | Conviene una cuenta del área, no personal |
 | Proyecto de Firebase en plan **Blaze** | https://console.firebase.google.com | Cloud Functions lo exige; la cuota gratuita cubre de sobra un piloto |
@@ -136,7 +136,15 @@ npm run import-directory -- nomina.csv
 npm run make-qr
 ```
 
-Abre `functions/qr-print/imprimir.html`, imprime los QR y pégalos en los accesos. En macOS o Linux, el comando de las variables es `export GOOGLE_APPLICATION_CREDENTIALS=service-account.json GCLOUD_PROJECT=ID-DEL-PROYECTO`.
+Abre `functions/qr-print/imprimir.html`, imprime los QR y pégalos en los accesos.
+
+**Primer administrador.** Si la nómina no trae a nadie con `rol` = `admin`, créalo así:
+
+```bash
+npm run make-admin -- tu.correo@netlife.net.ec "Tu Nombre" "Talento Humano"
+```
+
+Desde ese momento, en la app, el botón ⚙ (**Gestión**) permite agregar personas y otros administradores, crear actividades nuevas y generar e imprimir sus QR, sin volver a usar estos comandos. En macOS o Linux, el comando de las variables es `export GOOGLE_APPLICATION_CREDENTIALS=service-account.json GCLOUD_PROJECT=ID-DEL-PROYECTO`.
 
 ## 4. Configurar Expo
 

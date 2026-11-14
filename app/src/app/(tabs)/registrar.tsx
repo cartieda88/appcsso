@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { useCatalog } from '@/lib/catalog';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
@@ -7,12 +8,12 @@ import { Icon } from '@/components/icon';
 import { Stamp } from '@/components/stamp';
 import { ActivityDot, Button, Card, Chip, Loading, Row, Screen, T } from '@/components/ui';
 import { errorMessage, registerActivity, type RegisterResult } from '@/lib/api';
-import { ACTIVITIES, QR_ACTIVITY_IDS } from '@/lib/program';
 import { radius, useTheme } from '@/lib/theme';
 
 type State = { kind: 'scanning' } | { kind: 'sending' } | { kind: 'done'; result: RegisterResult } | { kind: 'error'; message: string };
 
 export default function Registrar() {
+  const cat = useCatalog();
   const t = useTheme();
   const focused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
@@ -120,14 +121,14 @@ export default function Registrar() {
 
       <Card>
         <T v="label">Puntos por actividad</T>
-        {QR_ACTIVITY_IDS.map((a) => (
+        {cat.qr.map((x) => x.id).map((a) => (
           <Row key={a}>
             <ActivityDot activity={a} size={34} />
             <View style={{ flex: 1 }}>
-              <T>{ACTIVITIES[a].name}</T>
-              <T v="small">{ACTIVITIES[a].rule}</T>
+              <T>{cat.get(a).name}</T>
+              <T v="small">{cat.get(a).rule}</T>
             </View>
-            <T v="num" color={t.brandText}>+{ACTIVITIES[a].points}</T>
+            <T v="num" color={t.brandText}>+{cat.get(a).points}</T>
           </Row>
         ))}
       </Card>

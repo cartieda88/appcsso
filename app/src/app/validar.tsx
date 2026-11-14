@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useCatalog } from '@/lib/catalog';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
@@ -7,7 +8,7 @@ import { Stamp } from '@/components/stamp';
 import { Button, Card, Empty, Loading, Row, Screen, T } from '@/components/ui';
 import { errorMessage, reviewActivity } from '@/lib/api';
 import { usePendingApprovals, type PendingStamp } from '@/lib/data';
-import { ACTIVITIES, relativeDay } from '@/lib/program';
+import { relativeDay } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
@@ -42,6 +43,7 @@ export default function Validar() {
 }
 
 function PendingCard({ p, onDone }: { p: PendingStamp; onDone: (ok: boolean) => void }) {
+  const cat = useCatalog();
   const t = useTheme();
   const { user } = useSession();
   const [busy, setBusy] = useState<'ok' | 'no' | null>(null);
@@ -63,7 +65,7 @@ function PendingCard({ p, onDone }: { p: PendingStamp; onDone: (ok: boolean) => 
         <View style={{ flex: 1, gap: 2 }}>
           <T style={{ fontFamily: font.bold }} numberOfLines={1}>{p.name}</T>
           <T v="small">{p.dept}</T>
-          <T v="small">{ACTIVITIES[p.activity].name} · {relativeDay(p.at)}, {new Date(p.at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil' })}</T>
+          <T v="small">{cat.get(p.activity).name} · {relativeDay(p.at)}, {new Date(p.at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil' })}</T>
           <T v="small" numberOfLines={1}>{p.location}</T>
         </View>
       </Row>

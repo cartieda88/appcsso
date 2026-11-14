@@ -1,20 +1,22 @@
 import { View } from 'react-native';
+import { useCatalog } from '@/lib/catalog';
 
 import { Icon } from './icon';
 import { Card, Chip, Loading, Progress, Row, T } from './ui';
-import { ACTIVITIES, ACTIVITY_IDS, badgesFor, levelFor, LEVELS } from '@/lib/program';
+import { badgesFor, levelFor, LEVELS } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, useTheme } from '@/lib/theme';
 
 /** Nivel, puntos por actividad e insignias (pestaña Pasaporte → Logros). */
 export function LogrosView() {
+  const cat = useCatalog();
   const t = useTheme();
   const { profile } = useSession();
   if (!profile) return <Loading />;
   const s = profile.stats;
   const lv = levelFor(s.totalPoints);
   const badges = badgesFor(s);
-  const byAct = ACTIVITY_IDS.map((a) => ({ a, pts: (s.counts[a] ?? 0) * ACTIVITIES[a].points, n: s.counts[a] ?? 0 }));
+  const byAct = cat.all.filter((x) => x.active || (s.counts[x.id] ?? 0) > 0).map((x) => x.id).map((a) => ({ a, pts: (s.counts[a] ?? 0) * cat.get(a).points, n: s.counts[a] ?? 0 }));
   const max = Math.max(1, ...byAct.map((x) => x.pts));
 
   return (
@@ -36,10 +38,10 @@ export function LogrosView() {
         {byAct.map(({ a, pts, n }) => (
           <View key={a} style={{ gap: 6 }}>
             <Row style={{ justifyContent: 'space-between' }}>
-              <T v="small" color={t.ink}>{ACTIVITIES[a].name} · {n} registro{n === 1 ? '' : 's'}</T>
+              <T v="small" color={t.ink}>{cat.get(a).name} · {n} registro{n === 1 ? '' : 's'}</T>
               <T v="num" style={{ fontSize: 14 }}>{pts}</T>
             </Row>
-            <Progress value={pts / max} color={t.act[a]} />
+            <Progress value={pts / max} color={cat.color(t, a)} />
           </View>
         ))}
         <T v="small">Los retos cumplidos suman bonos aparte.</T>

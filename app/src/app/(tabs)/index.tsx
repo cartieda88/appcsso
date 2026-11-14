@@ -1,4 +1,5 @@
 import { Link } from 'expo-router';
+import { useCatalog } from '@/lib/catalog';
 import { Pressable, View } from 'react-native';
 
 import { BrandHeader } from '@/components/brand';
@@ -7,11 +8,12 @@ import { WebNotifyBanner } from '@/components/web-notify';
 import { Icon } from '@/components/icon';
 import { ActivityDot, Button, Card, Chip, Empty, Loading, Row, Screen, T } from '@/components/ui';
 import { useRecentActivities } from '@/lib/data';
-import { ACTIVITIES, dayKey, QR_ACTIVITY_IDS, initials, levelFor, relativeDay } from '@/lib/program';
+import { dayKey, initials, levelFor, relativeDay } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
 export default function Inicio() {
+  const cat = useCatalog();
   const t = useTheme();
   const { profile, isAdmin, isValidator, signOut } = useSession();
   const recent = useRecentActivities(8);
@@ -20,7 +22,7 @@ export default function Inicio() {
   const s = profile.stats;
   const lv = levelFor(s.totalPoints);
   const today = s.today?.day === dayKey() ? s.today.counts : {};
-  const todayTotal = Object.values(today).reduce((a, b) => a + (b ?? 0), 0);
+  const todayTotal = Object.values(today).reduce<number>((a, b) => a + (b ?? 0), 0);
 
   return (
     <Screen>
@@ -31,6 +33,13 @@ export default function Inicio() {
             <Link href="/validar" asChild>
               <Pressable accessibilityLabel="Validar sellos pendientes" style={headerBtn(t)}>
                 <Icon name="check" color={t.ink} />
+              </Pressable>
+            </Link>
+          ) : null}
+          {isAdmin ? (
+            <Link href="/gestion" asChild>
+              <Pressable accessibilityLabel="Gestión: actividades, QR y personas" style={headerBtn(t)}>
+                <Icon name="gear" color={t.ink} />
               </Pressable>
             </Link>
           ) : null}
@@ -70,13 +79,13 @@ export default function Inicio() {
         <Chip label={todayTotal ? `${todayTotal} registro${todayTotal > 1 ? 's' : ''}` : 'Sin registros aún'} tone={todayTotal ? 'ok' : 'warn'} />
       </Row>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {QR_ACTIVITY_IDS.map((a) => (
+        {cat.qr.map((x) => x.id).map((a) => (
           <Link key={a} href="/registrar" asChild>
             <Pressable style={{ flexBasis: '47%', flexGrow: 1 }}>
               <Card style={{ gap: 8 }}>
                 <ActivityDot activity={a} />
-                <T style={{ fontFamily: font.bold }}>{ACTIVITIES[a].name}</T>
-                <T v="small">+{ACTIVITIES[a].points} pts · {today[a] ?? 0}/{ACTIVITIES[a].maxPerDay} hoy</T>
+                <T style={{ fontFamily: font.bold }}>{cat.get(a).name}</T>
+                <T v="small">+{cat.get(a).points} pts · {today[a] ?? 0}/{cat.get(a).maxPerDay} hoy</T>
               </Card>
             </Pressable>
           </Link>
@@ -95,7 +104,7 @@ export default function Inicio() {
           <Row key={r.id} style={{ paddingVertical: 4, borderTopWidth: i ? 1 : 0, borderTopColor: t.line, paddingTop: i ? 12 : 0 }}>
             <ActivityDot activity={r.activity} size={36} />
             <View style={{ flex: 1 }}>
-              <T style={{ fontFamily: font.semibold }}>{ACTIVITIES[r.activity].name}</T>
+              <T style={{ fontFamily: font.semibold }}>{cat.get(r.activity).name}</T>
               <T v="small" numberOfLines={1}>{relativeDay(r.at)}, {new Date(r.at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil' })} · {r.location}</T>
             </View>
             {r.status === 'approved' ? <T v="num" color={t.brandText}>+{r.points + r.bonus}</T>

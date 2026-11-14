@@ -11,6 +11,7 @@ import { useColorScheme } from 'react-native';
 import '@/lib/background';
 import { enableBackgroundSteps } from '@/lib/background';
 import { configureNotifications, onNotificationOpen, registerForPush } from '@/lib/notifications';
+import { CatalogProvider } from '@/lib/catalog';
 import { SessionProvider, useSession } from '@/lib/session';
 import { setupWebHead } from '@/lib/web-head';
 import { useTheme } from '@/lib/theme';
@@ -42,6 +43,7 @@ function RootNavigator() {
           <Stack.Screen name="pausa" />
           <Stack.Protected guard={isAdmin}>
             <Stack.Screen name="admin" />
+            <Stack.Screen name="gestion" />
           </Stack.Protected>
           <Stack.Protected guard={isValidator}>
             <Stack.Screen name="validar" />
@@ -61,7 +63,9 @@ export default function RootLayout() {
   if (!loaded) return null;
   return (
     <SessionProvider>
-      <RootNavigator />
+      <CatalogProvider>
+        <RootNavigator />
+      </CatalogProvider>
     </SessionProvider>
   );
 }

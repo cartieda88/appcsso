@@ -147,3 +147,28 @@ export function useAttending(eventId: string) {
   }, [eventId, user]);
   return going;
 }
+
+/* ---------- Gestión (solo administradores: las reglas de Firestore lo exigen) ---------- */
+export interface QrPoint { id: string; activity: string; location: string; token: string; active: boolean; requiresApproval: boolean }
+export function useQrPoints() {
+  return useLive<QrPoint>(
+    () => query(collection(db, 'qrCodes')),
+    (id, d) => ({ id, activity: d.activity, location: d.location ?? '', token: d.token, active: d.active !== false, requiresApproval: d.requiresApproval === true }),
+    [],
+  );
+}
+export interface Person { email: string; name: string; dept: string; employeeId: string | null; role: 'colaborador' | 'validador' | 'admin'; active: boolean }
+export function usePeople() {
+  return useLive<Person>(
+    () => query(collection(db, 'directory')),
+    (id, d) => ({ email: id, name: d.name ?? '', dept: d.dept ?? '', employeeId: d.employeeId ?? null, role: d.role ?? 'colaborador', active: d.active !== false }),
+    [],
+  );
+}
+export function useDepartments() {
+  return useLive<{ id: string; name: string; headcount: number }>(
+    () => query(collection(db, 'departments')),
+    (id, d) => ({ id, name: d.name, headcount: d.headcount ?? 0 }),
+    [],
+  );
+}

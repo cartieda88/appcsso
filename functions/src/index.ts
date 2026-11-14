@@ -6,7 +6,7 @@ import { defineSecret, defineString } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
 
 import { sendPush } from './push';
@@ -29,6 +29,11 @@ import {
   dayKey,
   emptyStats,
   isActivityId,
+  mergeCatalog,
+  passportSet,
+  slugify,
+  validateActivity,
+  type Catalog,
   monthKey,
   normalizeEmail,
   parseQr,
@@ -75,6 +80,12 @@ function requireAdmin(req: CallableRequest): string {
   const uid = requireAuth(req);
   if (req.auth?.token.admin !== true) throw new HttpsError('permission-denied', 'Solo Talento Humano y el Comité pueden ver este panel.');
   return uid;
+}
+
+/** Actividades vigentes: las de fábrica más las creadas o editadas por Talento Humano. */
+async function loadCatalog(): Promise<Catalog> {
+  const snap = await db.collection('activities').get();
+  return mergeCatalog(Object.fromEntries(snap.docs.map((d) => [d.id, d.data()])));
 }
 
 /* =====================================================================
@@ -176,7 +187,9 @@ export const verifyLoginCode = onCall(async (req) => {
   if (existing.exists) await userRef.update(profile);
   else await userRef.set({ ...profile, createdAt: FieldValue.serverTimestamp(), stats: emptyStats() });
 
-  return { token: await auth.createCustomToken(user.uid, { admin: isAdmin, validator: isValidator }) };
+  // Sin permisos en el token: se leen de la cuenta (setCustomUserClaims), así un cambio de rol
+  // hecho en Gestión se aplica al renovar la sesión.
+  return { token: await auth.createCustomToken(user.uid) };
 });
 
 /* =====================================================================
@@ -191,10 +204,10 @@ type Tx = FirebaseFirestore.Transaction;
  */
 async function creditInTx(
   tx: Tx,
-  args: { uid: string; user: FirebaseFirestore.DocumentData; stats: UserStats; activity: ActivityId; at: Date },
+  args: { uid: string; user: FirebaseFirestore.DocumentData; stats: UserStats; activity: ActivityId; at: Date; catalog: Catalog },
 ) {
-  const { uid, user, activity, at } = args;
-  const rule = ACTIVITIES[activity];
+  const { uid, user, activity, at, catalog } = args;
+  const rule = catalog[activity] ?? ACTIVITIES[activity];
   const userRef = db.doc(`users/${uid}`);
   const day = dayKey(at);
   const periods = [monthKey(at), weekKey(at)];
@@ -224,7 +237,7 @@ async function creditInTx(
     }
   });
 
-  const { stats: credited, achievements } = creditActivity(args.stats, activity, at, rule.points);
+  const { stats: credited, achievements } = creditActivity(args.stats, activity, at, rule.points, passportSet(catalog));
   credited.totalPoints += challengeBonus;
   credited.challengesCompleted += completedChallenges.length;
   const passportBonus = achievements.reduce((n, a) => n + PASSPORT_ACHIEVEMENTS[a].bonus, 0);
@@ -273,12 +286,13 @@ export const registerActivity = onCall(async (req) => {
 
   const qrSnap = await db.doc(`qrCodes/${qr.id}`).get();
   const q = qrSnap.data();
-  if (!q || q.active === false || q.token !== qr.token || !isActivityId(q.activity)) {
+  const catalog = await loadCatalog();
+  if (!q || q.active === false || q.token !== qr.token || !isActivityId(q.activity, catalog)) {
     throw new HttpsError('failed-precondition', 'Este código QR ya no es válido. Avisa al Comité de Seguridad y Salud.');
   }
-  const activity = q.activity;
-  const rule = ACTIVITIES[activity];
-  const requiresApproval = q.requiresApproval === true;
+  const activity: string = q.activity;
+  const rule = catalog[activity];
+  const requiresApproval = q.requiresApproval === true || rule.requiresApproval === true;
 
   return db.runTransaction(async (tx) => {
     const now = new Date();
@@ -288,7 +302,7 @@ export const registerActivity = onCall(async (req) => {
     const user = userSnap.data()!;
     const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
 
-    const check = canRegister(stats, activity, now);
+    const check = canRegister(stats, activity, now, catalog);
     if (!check.ok) throw new HttpsError('failed-precondition', check.message!, { reason: check.reason });
 
     const { stats: reserved, stampNumber } = reserveStamp(stats, activity, now);
@@ -310,7 +324,7 @@ export const registerActivity = onCall(async (req) => {
       };
     }
 
-    const c = await creditInTx(tx, { uid, user, stats: reserved, activity, at: now });
+    const c = await creditInTx(tx, { uid, user, stats: reserved, activity, at: now, catalog });
     tx.set(activityRef, { ...base, status: 'approved', points: c.points, bonus: c.bonus });
     return {
       activity, activityName: rule.name, location: q.location ?? '', status: 'approved' as const,
@@ -328,6 +342,7 @@ export const reviewActivity = onCall(async (req) => {
   const note = typeof req.data?.note === 'string' ? req.data.note.slice(0, 200) : null;
   if (!approvalId) throw new HttpsError('invalid-argument', 'Falta el sello a revisar.');
 
+  const catalog = await loadCatalog();
   return db.runTransaction(async (tx) => {
     const apRef = db.doc(`approvals/${approvalId}`);
     const ap = (await tx.get(apRef)).data();
@@ -350,7 +365,7 @@ export const reviewActivity = onCall(async (req) => {
       tx.update(apRef, { status: 'rejected', ...review });
       return { status: 'rejected' as const };
     }
-    const c = await creditInTx(tx, { uid: ap.uid, user, stats, activity: ap.activity, at });
+    const c = await creditInTx(tx, { uid: ap.uid, user, stats, activity: ap.activity, at, catalog });
     tx.update(actRef, { status: 'approved', points: c.points, bonus: c.bonus, ...review });
     tx.update(apRef, { status: 'approved', ...review });
     return { status: 'approved' as const, points: c.points, bonus: c.bonus };
@@ -439,22 +454,23 @@ export const registerPause = onCall(async (req) => {
   if (!Number.isFinite(seconds) || seconds < PAUSE_MIN_SECONDS) {
     throw new HttpsError('failed-precondition', `Completa la rutina guiada (mínimo ${Math.round(PAUSE_MIN_SECONDS / 60)} minutos) para registrar la pausa.`);
   }
+  const catalog = await loadCatalog();
   return db.runTransaction(async (tx) => {
     const now = new Date();
     const userRef = db.doc(`users/${uid}`);
     const user = (await tx.get(userRef)).data();
     if (!user) throw new HttpsError('not-found', 'Tu perfil no existe. Vuelve a iniciar sesión.');
     const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
-    const check = canRegister(stats, 'pausa', now);
+    const check = canRegister(stats, 'pausa', now, catalog);
     if (!check.ok) throw new HttpsError('failed-precondition', check.message!, { reason: check.reason });
     const { stats: reserved, stampNumber } = reserveStamp(stats, 'pausa', now);
-    const c = await creditInTx(tx, { uid, user, stats: reserved, activity: 'pausa', at: now });
+    const c = await creditInTx(tx, { uid, user, stats: reserved, activity: 'pausa', at: now, catalog });
     tx.set(userRef.collection('activities').doc(), {
       activity: 'pausa', qrId: null, location: 'Pausa activa guiada', day: dayKey(now), stampNumber,
       createdAt: Timestamp.fromDate(now), status: 'approved', points: c.points, bonus: c.bonus, seconds: Math.round(seconds),
     });
     return {
-      activity: 'pausa', activityName: ACTIVITIES.pausa.name, location: 'Pausa activa guiada', status: 'approved' as const,
+      activity: 'pausa', activityName: catalog.pausa.name, location: 'Pausa activa guiada', status: 'approved' as const,
       points: c.points, pendingPoints: 0, bonus: c.bonus, completedChallenges: c.completedChallenges, achievements: c.achievements,
       totalPoints: c.stats.totalPoints, streak: c.stats.streak, stampNumber, stampedAt: now.getTime(),
     };
@@ -481,6 +497,7 @@ export const syncSteps = onCall(async (req) => {
   const today = dayKey(new Date());
   const allowed = new Set([today, addDays(today, -1)]);
   const goal = await stepGoal();
+  const catalog = await loadCatalog();
   const results: { day: string; steps: number; goal: number; goalReachedNow: boolean; points: number }[] = [];
 
   for (const { day, steps } of days) {
@@ -499,7 +516,7 @@ export const syncSteps = onCall(async (req) => {
         const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
         stats.stampsIssued = Math.max(stats.stampsIssued, stats.totalActivities) + 1;
         const stampNumber = stats.stampsIssued;
-        const c = await creditInTx(tx, { uid, user, stats, activity: 'pasos', at });
+        const c = await creditInTx(tx, { uid, user, stats, activity: 'pasos', at, catalog });
         tx.set(userRef.collection('activities').doc(), {
           activity: 'pasos', qrId: null, location: `${best.toLocaleString('es-EC')} pasos`, day, stampNumber,
           createdAt: Timestamp.fromDate(at), status: 'approved', points: c.points, bonus: c.bonus,
@@ -684,6 +701,87 @@ export const debugRunReminders = onCall(async (req) => {
   requireAdmin(req);
   const now = new Date(Number(req.data?.now) || Date.now());
   return { sent: await runEventReminders(now), pauses: await runPauseReminders(now) };
+});
+
+/* =====================================================================
+ * 10. Gestión (Talento Humano / Comité): actividades, QR, personas
+ * ===================================================================== */
+export const saveActivity = onCall(async (req) => {
+  const uid = requireAdmin(req);
+  const v = validateActivity(req.data ?? {});
+  if ('error' in v) throw new HttpsError('invalid-argument', v.error);
+  const isNew = req.data?.id ? false : !(await db.doc(`activities/${v.id}`).get()).exists && !(v.id in ACTIVITIES);
+  if (!req.data?.id && !isNew) throw new HttpsError('already-exists', 'Ya existe una actividad con ese nombre.');
+  await db.doc(`activities/${v.id}`).set({ ...v.rule, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return { id: v.id };
+});
+
+export const saveQrPoint = onCall(async (req) => {
+  requireAdmin(req);
+  const d = req.data ?? {};
+  const catalog = await loadCatalog();
+  if (d.id) {
+    const ref = db.doc(`qrCodes/${String(d.id)}`);
+    const cur = (await ref.get()).data();
+    if (!cur) throw new HttpsError('not-found', 'El punto QR no existe.');
+    const patch: Record<string, unknown> = {};
+    if (typeof d.location === 'string' && d.location.trim()) patch.location = d.location.trim().slice(0, 80);
+    if (typeof d.active === 'boolean') patch.active = d.active;
+    if (typeof d.requiresApproval === 'boolean') patch.requiresApproval = d.requiresApproval;
+    if (d.rotate === true) patch.token = randomBytes(12).toString('hex');
+    await ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+    return { id: ref.id, token: (patch.token as string) ?? cur.token };
+  }
+  const activity = String(d.activity ?? '');
+  if (!catalog[activity] || catalog[activity].kind === 'app') throw new HttpsError('invalid-argument', 'Elige una actividad que se registre con QR.');
+  const location = String(d.location ?? '').trim().slice(0, 80);
+  if (location.length < 3) throw new HttpsError('invalid-argument', 'Escribe el lugar donde irá el QR.');
+  const prefix = slugify(activity).toUpperCase().replace(/-/g, '').slice(0, 5) || 'QR';
+  let id = '';
+  for (let i = 0; i < 5 && !id; i++) {
+    const cand = `${prefix}-${randomBytes(2).toString('hex').toUpperCase()}`;
+    if (!(await db.doc(`qrCodes/${cand}`).get()).exists) id = cand;
+  }
+  const token = randomBytes(12).toString('hex');
+  await db.doc(`qrCodes/${id}`).set({ activity, location, token, active: true, requiresApproval: d.requiresApproval === true, createdAt: FieldValue.serverTimestamp() });
+  return { id, token };
+});
+
+const ROLES = ['colaborador', 'validador', 'admin'] as const;
+
+export const savePerson = onCall(async (req) => {
+  const adminUid = requireAdmin(req);
+  const d = req.data ?? {};
+  const email = normalizeEmail(d.email);
+  if (!email) throw new HttpsError('invalid-argument', 'Escribe un correo válido.');
+  if (!email.endsWith('@' + ALLOWED_DOMAIN.value().toLowerCase())) throw new HttpsError('invalid-argument', `El correo debe ser @${ALLOWED_DOMAIN.value()}.`);
+  const name = String(d.name ?? '').trim().slice(0, 80);
+  const dept = String(d.dept ?? '').trim().slice(0, 60);
+  if (!name || !dept) throw new HttpsError('invalid-argument', 'Completa nombre y departamento.');
+  const role = ROLES.includes(d.role) ? (d.role as (typeof ROLES)[number]) : 'colaborador';
+  const active = d.active !== false;
+
+  const auth = getAuth();
+  const existing = await auth.getUserByEmail(email).catch(() => null);
+  if (existing?.uid === adminUid && (role !== 'admin' || !active)) {
+    throw new HttpsError('failed-precondition', 'No puedes quitarte a ti mismo el rol de administrador.');
+  }
+  await db.doc(`directory/${email}`).set({ email, name, dept, employeeId: String(d.employeeId ?? '').trim() || null, role, active }, { merge: true });
+  if (existing) {
+    await auth.setCustomUserClaims(existing.uid, { ...(existing.customClaims ?? {}), admin: role === 'admin', validator: role === 'validador' });
+    await db.doc(`users/${existing.uid}`).set({ name, dept, role }, { merge: true });
+    if (!active) await auth.revokeRefreshTokens(existing.uid);
+  }
+  return { email, role, active, hasAccount: !!existing };
+});
+
+export const saveDepartment = onCall(async (req) => {
+  requireAdmin(req);
+  const name = String(req.data?.name ?? '').trim().slice(0, 60);
+  const headcount = Math.max(0, Math.floor(Number(req.data?.headcount) || 0));
+  if (!name) throw new HttpsError('invalid-argument', 'Escribe el nombre del departamento.');
+  await db.doc(`departments/${slug(name)}`).set({ name, headcount }, { merge: true });
+  return { name, headcount };
 });
 
 function slug(s: string) {

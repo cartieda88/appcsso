@@ -1,8 +1,9 @@
 import Svg, { Circle, Defs, G, Line, Path, Rect, Text as SvgText, TextPath, TSpan } from 'react-native-svg';
+import { useCatalog } from '@/lib/catalog';
 
 import type { StampStatus } from '@/lib/data';
 
-import { ACTIVITIES, type ActivityId } from '@/lib/program';
+import type { ActivityId } from '@/lib/program';
 import { Platform } from 'react-native';
 
 import { font as baseFont, useTheme } from '@/lib/theme';
@@ -31,14 +32,15 @@ const tilt = (n: number) => ((n * 37) % 17) - 8;
  * número de sello y "Muévete Netlife" en el arco inferior.
  */
 export function Stamp({ activity, at, number, size = 104, status = 'approved' }: { activity: ActivityId; at: number; number?: number | null; size?: number; status?: StampStatus }) {
+  const cat = useCatalog();
   const t = useTheme();
-  const ink = status === 'approved' ? t.act[activity] : status === 'pending' ? t.muted : t.warn;
+  const ink = status === 'approved' ? cat.color(t, activity) : status === 'pending' ? t.muted : t.warn;
   const band = status === 'pending' ? 'PENDIENTE' : status === 'rejected' ? 'NO VALIDADO' : null;
   const { date, time } = stampDate(at);
   const id = `${activity}-${number ?? at}`;
-  const name = ACTIVITIES[activity].name.toUpperCase();
+  const name = cat.get(activity).name.toUpperCase();
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`Sello ${ACTIVITIES[activity].name}, ${date} a las ${time}${band ? `, ${band.toLowerCase()}` : ''}`}>
+    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityLabel={`Sello ${cat.get(activity).name}, ${date} a las ${time}${band ? `, ${band.toLowerCase()}` : ''}`}>
       <Defs>
         <Path id={`top-${id}`} d="M 14 50 A 36 36 0 0 1 86 50" />
         <Path id={`bot-${id}`} d="M 12 50 A 38 38 0 0 0 88 50" />

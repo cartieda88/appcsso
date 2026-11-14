@@ -18,7 +18,7 @@ const light = {
   ok: '#1C7A43',
   warn: '#C2410C',
   dotInk: '#FFFFFF',
-  act: { gradas: '#141416', gimnasio: '#3B4A8C', piscina: '#0E7FA6', futbol: '#D9640A', pausa: '#7A2E83', pasos: '#2D7A4F' },
+  act: { gradas: '#141416', gimnasio: '#3B4A8C', piscina: '#0E7FA6', futbol: '#D9640A', pausa: '#7A2E83', pasos: '#2D7A4F', cielo: '#1F6FB2', coral: '#C2410C', oliva: '#5B6B1E', vino: '#8E1F3E', turquesa: '#0F766E', grafito: '#4B5563' },
 };
 
 const dark: typeof light = {
@@ -38,7 +38,7 @@ const dark: typeof light = {
   ok: '#4CC27E',
   warn: '#FF9B4A',
   dotInk: '#141416',
-  act: { gradas: '#F5AD20', gimnasio: '#8A9BE0', piscina: '#4CC3E8', futbol: '#FF9B4A', pausa: '#D59BE0', pasos: '#6FD3A2' },
+  act: { gradas: '#F5AD20', gimnasio: '#8A9BE0', piscina: '#4CC3E8', futbol: '#FF9B4A', pausa: '#D59BE0', pasos: '#6FD3A2', cielo: '#7CB8F0', coral: '#FF9B7A', oliva: '#C3D47A', vino: '#F08AA8', turquesa: '#5ED6C8', grafito: '#C2C7CF' },
 };
 
 export type Theme = typeof light;
@@ -57,3 +57,6 @@ export const font = {
 };
 
 export const radius = { sm: 12, md: 16, lg: 20, pill: 999 };
+
+/** Colores que Talento Humano puede elegir para una actividad. */
+export const ACTIVITY_COLORS = ['gradas', 'gimnasio', 'piscina', 'futbol', 'pausa', 'pasos', 'cielo', 'coral', 'oliva', 'vino', 'turquesa', 'grafito'] as const;

@@ -12,7 +12,8 @@
     "deploy": "firebase deploy --only functions,firestore",
     "seed": "tsc && node lib/scripts/seed.js",
     "import-directory": "tsc && node lib/scripts/import-directory.js",
-    "make-qr": "tsc && node lib/scripts/make-qr.js"
+    "make-qr": "tsc && node lib/scripts/make-qr.js",
+    "make-admin": "tsc && node lib/scripts/make-admin.js"
   },
   "dependencies": {
     "firebase-admin": "^14.5.1",

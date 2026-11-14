@@ -31,13 +31,19 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 - **Pasos:** la app lee los pasos del día del **podómetro del iPhone** (CoreMotion) o de **Health Connect** en Android (Google Fit, Samsung Health, relojes). Al llegar a la meta diaria (8.000 por defecto, en `config/steps.dailyGoal`) se emite el sello *Meta de pasos* (+10) y llega una **notificación**, también con la app cerrada, gracias a una tarea en segundo plano cada ~30 min. Se envían los pasos de hoy y de ayer, y el servidor guarda el máximo de cada día (tope de 70.000). Esto alimenta el reto "21 días de 8.000 pasos".
 - **Agenda y notificaciones push:** Talento Humano publica carreras, campeonatos, caminatas o charlas (fecha, hora, lugar y descripción) desde *Retos → Agenda*. Al publicar llega un push a todo el personal. Los colaboradores se inscriben con *Me apunto*. Una función programada envía los recordatorios **24 h antes** ("Mañana: …") y **el mismo día** desde las 07:00 ("Hoy: …"), a los inscritos o a todo el personal según se elija. Si cambia la fecha o el lugar, o se anula, se avisa y los recordatorios se reprograman. Los push usan el servicio de Expo, así que no hace falta configurar FCM ni APNs a mano.
 - **Ingreso sin contraseña:** no hay contraseñas que recuperar; cada ingreso usa un código nuevo de 6 dígitos que llega al correo. La pantalla tiene *Reenviar código* (cada 60 s) y ayuda si el código no llega.
+- **Gestión (administradores):** botón ⚙ en Inicio. Talento Humano administra desde la app, sin tocar código:
+  - **Actividades:** crear nuevas (Yoga, Bailoterapia, Ciclismo…) o editar las existentes: puntos, registros por día, tiempo entre registros, si requieren validación, si cuentan para *Pasaporte completo*, ícono y color, y activar o desactivar.
+  - **Puntos QR:** un QR por lugar, que se ve en pantalla y se descarga o comparte como imagen para imprimir (con el logo de Netlife). Permite cambiar la clave si alguien difunde una foto, y desactivar el punto.
+  - **Personas:** agregar colaboradores, asignar el rol (colaborador, validador o administrador) y dar de baja. Nadie puede quitarse a sí mismo el rol de administrador.
+  - **Departamentos:** número de personas, que se usa para el ranking por departamento y el % de participación.
+  - El **primer administrador** se crea una sola vez con `npm run make-admin -- correo@netlife.net.ec "Nombre" "Talento Humano"`.
 - **Retos:** pueden ser de días distintos con actividad (por ejemplo, 7 días seguidos) o de número de registros (por ejemplo, 21 de gradas). Al cumplirlos se suma el bono.
 
 ### Datos en Firestore
 
 | Colección | Contenido | Quién la lee |
 |---|---|---|
-| `directory/{correo}` | Nómina autorizada: nombre, departamento, cédula, rol | Solo el servidor |
+| `directory/{correo}` | Nómina autorizada: nombre, departamento, cédula, rol | Administradores |
 | `users/{uid}` (+ `activities`, `challenges`) | Perfil, estadísticas, historial y retos | El propio colaborador y los admin |
 | `scores/{periodo}_{uid}`, `deptScores/…` | Ranking por semana (`W2026-46`) y mes (`M2026-11`) | Todos los colaboradores |
 | `stats/{periodo}` | Totales para el panel | Admin |
@@ -45,7 +51,8 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 | `steps/{uid}_{día}` | Pasos del día y si llegó a la meta | El propio colaborador y los admin |
 | `events/{id}` (+ `attendees`) | Agenda del Comité e inscritos | Todos (cada uno ve su inscripción) |
 | `users/{uid}/devices/{id}` | Tokens de notificaciones push | Solo el servidor |
-| `qrCodes/{id}` | Actividad, lugar y token secreto de cada QR | Solo el servidor |
+| `activities/{id}` | Actividades creadas o editadas en Gestión (se suman a las de fábrica) | Todos |
+| `qrCodes/{id}` | Actividad, lugar y token secreto de cada QR | Administradores |
 | `challenges/{id}`, `departments/{id}`, `config/campaign` | Configuración del Comité | Todos los colaboradores |
 
 ## Probar en tu computadora (sin crear nada en Firebase)
