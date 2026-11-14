@@ -13,6 +13,11 @@ const config = {
 export const FUNCTIONS_REGION = 'us-east1';
 /** IP de tu computadora en la red local cuando pruebas con los emuladores desde un teléfono. */
 export const EMULATOR_HOST = process.env.EXPO_PUBLIC_EMULATOR_HOST;
+/**
+ * Solo demostración web: los emuladores se alcanzan por la misma dirección de la página
+ * (scripts/demo-server.mjs hace de intermediario). Útil para mostrar la página con un solo puerto.
+ */
+export const EMULATOR_SAME_ORIGIN = process.env.EXPO_PUBLIC_EMULATOR_SAME_ORIGIN === '1';
 
 /** false si el build no trae la configuración de Firebase (ver docs/COMPILAR-PILOTO.md). */
 export const FIREBASE_CONFIGURED = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY && !!process.env.EXPO_PUBLIC_FIREBASE_APP_ID;

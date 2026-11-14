@@ -72,3 +72,13 @@ En Firebase → **Hosting → Agregar dominio personalizado**, por ejemplo `muev
 ## Probar en tu computadora
 
 Tarea **Probar página web en esta computadora** (`npx expo start --web`): abre la página en el navegador con recarga automática. Para no tocar los datos reales, usa además la tarea **Probar con emuladores de Firebase** y agrega `EXPO_PUBLIC_EMULATOR_HOST=127.0.0.1` a `app/.env`.
+
+## Demostración sin Firebase real
+
+Para mostrar la página con datos de prueba, por ejemplo al Comité, antes de crear el proyecto:
+
+1. Tarea **Probar con emuladores de Firebase** (déjala corriendo).
+2. Carga los datos de ejemplo: en `functions/`, `npm run seed` y `npm run import-directory -- ejemplo-nomina.csv`, con `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` y `GCLOUD_PROJECT=demo-muevete`.
+3. Tarea **Demostración web con datos de prueba (un solo puerto)** → abre http://localhost:8091.
+
+En este modo no llegan correos: la pantalla de ingreso muestra el código. Los datos se borran al cerrar los emuladores.

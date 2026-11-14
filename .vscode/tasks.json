@@ -62,6 +62,21 @@
       "problemMatcher": []
     },
     {
+      "label": "Demostración web con datos de prueba (un solo puerto)",
+      "detail": "Necesita la tarea 'Probar con emuladores de Firebase' corriendo. Abre http://localhost:8091",
+      "type": "shell",
+      "command": "npx expo export -p web && node ../scripts/demo-server.mjs 8091",
+      "options": {
+        "cwd": "${workspaceFolder}/app",
+        "env": {
+          "EXPO_PUBLIC_EMULATOR_SAME_ORIGIN": "1",
+          "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "demo-muevete"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
       "label": "Generar proyecto Android",
       "type": "shell",
       "command": "npx expo prebuild --platform android --clean",
