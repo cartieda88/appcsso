@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
 import { NetlifeLogo } from '@/components/brand';
 import { Button, Card, Screen, T } from '@/components/ui';
 import { errorMessage, requestLoginCode } from '@/lib/api';
+import { EMULATOR_HOST, FIREBASE_CONFIGURED } from '@/lib/firebase-config';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
@@ -60,6 +61,11 @@ export default function Login() {
           <T v="h1" style={{ fontSize: 44, lineHeight: 48 }}>Muévete</T>
           <T color={t.muted}>Registra tus actividades de gimnasio, piscina, fútbol y gradas, suma puntos y compite con tu departamento.</T>
 
+          {!FIREBASE_CONFIGURED && !EMULATOR_HOST ? (
+            <Card style={{ backgroundColor: t.warn + '1A', borderColor: t.warn }}>
+              <T color={t.warn}>Esta versión se compiló sin la configuración de Firebase y no puede conectarse. Revisa las variables EXPO_PUBLIC_FIREBASE_* (docs/COMPILAR-PILOTO.md, paso 4).</T>
+            </Card>
+          ) : null}
           {step === 'email' ? (
             <View style={{ gap: 10 }}>
               <T v="small" color={t.ink}>Correo institucional</T>

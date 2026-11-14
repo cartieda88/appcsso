@@ -1,9 +1,15 @@
 {
   "cli": { "appVersionSource": "remote" },
   "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
-    "piloto": { "distribution": "internal", "android": { "buildType": "apk" }, "channel": "piloto" },
-    "production": { "autoIncrement": true, "channel": "production" }
+    "piloto": {
+      "environment": "preview",
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "environment": "production",
+      "autoIncrement": true
+    }
   },
   "submit": { "production": {} }
 }

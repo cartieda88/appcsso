@@ -3,3 +3,4 @@ lib/
 qr-print/
 service-account*.json
 .env.local
+nomina*.csv

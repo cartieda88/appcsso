@@ -14,4 +14,7 @@ export const FUNCTIONS_REGION = 'us-east1';
 /** IP de tu computadora en la red local cuando pruebas con los emuladores desde un teléfono. */
 export const EMULATOR_HOST = process.env.EXPO_PUBLIC_EMULATOR_HOST;
 
+/** false si el build no trae la configuración de Firebase (ver docs/COMPILAR-PILOTO.md). */
+export const FIREBASE_CONFIGURED = !!process.env.EXPO_PUBLIC_FIREBASE_API_KEY && !!process.env.EXPO_PUBLIC_FIREBASE_APP_ID;
+
 export const app: FirebaseApp = getApps()[0] ?? initializeApp(config);

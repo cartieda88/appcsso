@@ -83,6 +83,8 @@ Pruebas unitarias de las reglas: `cd functions && npm test`.
 
 ## Puesta en producción
 
+**Paso a paso para el piloto (Firebase, Expo y APK):** [docs/COMPILAR-PILOTO.md](docs/COMPILAR-PILOTO.md).
+
 1. **Proyecto Firebase:** créalo en la consola de Firebase con el plan **Blaze**, que Cloud Functions requiere y que tiene una cuota gratuita amplia. Activa Authentication (no hace falta ningún proveedor: el ingreso usa tokens personalizados) y Firestore. Pon el ID en `.firebaserc`.
 2. **Permiso para firmar tokens:** en Google Cloud → IAM, dale a la cuenta de servicio de Cloud Functions (`<número>-compute@developer.gserviceaccount.com`) el rol **Creador de tokens de cuenta de servicio** (*Service Account Token Creator*).
 3. **Correo saliente** (pídelo a TI). Puede ser una cuenta de Microsoft 365 con SMTP AUTH habilitado, o un servicio como SendGrid:
