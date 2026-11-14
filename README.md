@@ -23,7 +23,10 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 
   Los días, semanas y meses se calculan en hora de Ecuador (`America/Guayaquil`).
 - **Ranking:** es semanal y mensual. Los departamentos se ordenan por puntos promedio por colaborador (puntos ÷ número de personas del departamento), para que los equipos pequeños compitan en igualdad.
-- **Pasaporte:** cada registro validado deja un sello numerado (N° 0001, 0002…) con la actividad, la fecha y la hora en hora de Ecuador. Los sellos se ven por mes, y al tocar uno se muestra el detalle (lugar y puntos). Al escanear, el sello nuevo aparece con una animación. La pestaña también incluye el nivel y las insignias.
+- **Pasaporte:** cada registro deja un sello numerado (N° 0001, 0002…) con la actividad, la fecha y la hora en hora de Ecuador. Los sellos se ven por mes, y al tocar uno se muestra el detalle (lugar y puntos). Al escanear, el sello nuevo aparece con una animación. La pestaña también incluye el nivel y las insignias.
+  - **Logros del mes:** *Página completa* (9 sellos validados en el mes) y *Pasaporte completo* (un sello de cada actividad en el mes). Cada uno da +50 puntos una vez por mes; los valores están en `functions/src/rules.ts` (`PAGE_SIZE`, `PASSPORT_ACHIEVEMENTS`).
+  - **Compartir:** el botón *Compartir esta página* genera una imagen PNG de la página del mes y abre el menú de compartir del teléfono (WhatsApp, Teams, correo). En el navegador la descarga.
+- **Validación por un responsable:** los QR con `requiresApproval: true` (por defecto, el de la cancha de fútbol) dejan el sello *pendiente*, sin puntos. Las personas con rol `validador` en la nómina (la mesa de control) o los `admin` lo aprueban o rechazan desde el botón ✓ de la pantalla de inicio. Al aprobar se suman los puntos, la racha, los retos, el ranking y los logros del pasaporte, con la fecha y hora originales del registro. Al rechazar se puede escribir un motivo y la persona puede volver a registrarse ese día. Nadie puede validar su propio sello. El panel de Talento Humano muestra cuántos sellos esperan validación.
 - **Retos:** pueden ser de días distintos con actividad (por ejemplo, 7 días seguidos) o de número de registros (por ejemplo, 21 de gradas). Al cumplirlos se suma el bono.
 
 ### Datos en Firestore
@@ -34,6 +37,7 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 | `users/{uid}` (+ `activities`, `challenges`) | Perfil, estadísticas, historial y retos | El propio colaborador y los admin |
 | `scores/{periodo}_{uid}`, `deptScores/…` | Ranking por semana (`W2026-46`) y mes (`M2026-11`) | Todos los colaboradores |
 | `stats/{periodo}` | Totales para el panel | Admin |
+| `approvals/{id}` | Sellos pendientes de validación | Validadores y admin |
 | `qrCodes/{id}` | Actividad, lugar y token secreto de cada QR | Solo el servidor |
 | `challenges/{id}`, `departments/{id}`, `config/campaign` | Configuración del Comité | Todos los colaboradores |
 
@@ -64,7 +68,7 @@ cd app && npm install
 EXPO_PUBLIC_EMULATOR_HOST=<IP de tu computadora> npx expo start
 ```
 
-Con los emuladores, la pantalla de ingreso muestra el código en lugar de enviarlo por correo. Usuarios de ejemplo: `mf.ruiz@netlife.net.ec` (colaboradora) y `th.admin@netlife.net.ec` (Talento Humano). Para escanear, abre `functions/qr-print/imprimir.html` en la pantalla de la computadora y apunta el teléfono.
+Con los emuladores, la pantalla de ingreso muestra el código en lugar de enviarlo por correo. Usuarios de ejemplo: `mf.ruiz@netlife.net.ec` (colaboradora), `mesa.futbol@netlife.net.ec` (validador) y `th.admin@netlife.net.ec` (Talento Humano). Para escanear, abre `functions/qr-print/imprimir.html` en la pantalla de la computadora y apunta el teléfono.
 
 > La cámara y el lector de QR necesitan una *development build* (`npx expo run:android`, o `eas build --profile development`). Expo Go puede no incluir todos los módulos nativos.
 
@@ -83,7 +87,7 @@ Pruebas unitarias de las reglas: `cd functions && npm test`.
 4. **Desplegar:** `firebase deploy --only functions,firestore`
 5. **Cargar datos** con una cuenta de servicio: `export GOOGLE_APPLICATION_CREDENTIALS=service-account.json GCLOUD_PROJECT=<id>`.
    - `npm run seed`: carga departamentos, retos, campaña y QR. Antes, edita `functions/scripts/seed.ts` con los números reales de personas por departamento y con todos los accesos.
-   - `npm run import-directory -- nomina.csv`: carga la nómina, con las columnas `correo,nombre,departamento,cedula,rol`.
+   - `npm run import-directory -- nomina.csv`: carga la nómina, con las columnas `correo,nombre,departamento,cedula,rol` (`rol`: vacío, `validador` o `admin`).
    - `npm run make-qr`: genera los QR. Imprime `qr-print/imprimir.html` y pégalos en los accesos.
    - Si se filtra la foto de un QR, ejecuta `npm run seed -- --rotate` y reimprime.
 6. **App:** copia `app/.env.example` a `app/.env` con los datos de la app web de Firebase y luego:

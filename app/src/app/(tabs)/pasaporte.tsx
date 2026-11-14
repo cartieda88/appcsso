@@ -1,18 +1,20 @@
-import { useState } from 'react';
-import { Modal, Pressable, View } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { useRef, useState, type ComponentRef } from 'react';
+import { Modal, Platform, Pressable, View } from 'react-native';
+import { captureRef } from 'react-native-view-shot';
 
 import { NetlifeLogo } from '@/components/brand';
 import { Icon } from '@/components/icon';
 import { LogrosView } from '@/components/logros-view';
 import { Stamp, StampSlot, stampDate } from '@/components/stamp';
-import { Button, Card, Chip, Loading, Row, Screen, Segmented, T } from '@/components/ui';
+import { Button, Card, Chip, Loading, Progress, Row, Screen, Segmented, T } from '@/components/ui';
 import { usePassport, type ActivityLog } from '@/lib/data';
-import { ACTIVITIES, ACTIVITY_IDS, dayKey } from '@/lib/program';
+import { ACTIVITIES, ACTIVITY_IDS, dayKey, PAGE_SIZE, PASSPORT_BONUS } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const SLOTS_PER_PAGE = 9;
+const SLOTS_PER_PAGE = PAGE_SIZE;
 
 function currentMonth() {
   const [y, m] = dayKey().split('-').map(Number);
@@ -42,6 +44,32 @@ function Sellos() {
     const i = y * 12 + (m - 1) + d;
     return { y: Math.floor(i / 12), m: (i % 12) + 1 };
   });
+
+  const pageRef = useRef<ComponentRef<typeof View>>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+  const approved = rows?.filter((r) => r.status === 'approved') ?? [];
+  const pending = rows?.filter((r) => r.status === 'pending').length ?? 0;
+  const monthKinds = new Set(approved.map((r) => r.activity)).size;
+  const monthData = profile?.stats.months?.[`${page.y}-${String(page.m).padStart(2, '0')}`];
+
+  async function sharePage() {
+    if (!pageRef.current) return;
+    setSharing(true); setShareMsg(null);
+    try {
+      const name = `pasaporte-muevete-${page.y}-${String(page.m).padStart(2, '0')}`;
+      if (Platform.OS === 'web') {
+        const uri = await captureRef(pageRef as unknown as Parameters<typeof captureRef>[0], { format: 'png', quality: 1, result: 'data-uri' });
+        const a = document.createElement('a'); a.href = uri; a.download = `${name}.png`; a.click();
+      } else {
+        const uri = await captureRef(pageRef as unknown as Parameters<typeof captureRef>[0], { format: 'png', quality: 1, result: 'tmpfile', fileName: name });
+        if (!(await Sharing.isAvailableAsync())) { setShareMsg('Este teléfono no permite compartir imágenes.'); return; }
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Compartir mi pasaporte', UTI: 'public.png' });
+      }
+    } catch {
+      setShareMsg('No se pudo crear la imagen. Inténtalo otra vez.');
+    } finally { setSharing(false); }
+  }
 
   const stats = profile?.stats;
   const kinds = stats ? ACTIVITY_IDS.filter((a) => (stats.counts[a] ?? 0) > 0).length : 0;
@@ -83,20 +111,28 @@ function Sellos() {
         </Pressable>
         <View style={{ alignItems: 'center' }}>
           <T v="h3">{MONTH_NAMES[page.m - 1]} {page.y}</T>
-          <T v="small">{rows ? `${rows.length} sello${rows.length === 1 ? '' : 's'}` : ' '}</T>
+          <T v="small">{rows ? `${rows.length} sello${rows.length === 1 ? '' : 's'}${pending ? ` · ${pending} pendiente${pending === 1 ? '' : 's'}` : ''}` : ' '}</T>
         </View>
         <Pressable accessibilityLabel="Mes siguiente" disabled={isCurrent} onPress={() => move(1)} style={[navBtn(t), { opacity: isCurrent ? 0.3 : 1 }]}>
           <View style={{ transform: [{ scaleX: -1 }] }}><Icon name="back" color={t.ink} /></View>
         </Pressable>
       </Row>
 
-      <Card style={{ padding: 12 }}>
-        {error ? <T color={t.warn}>No se pudo cargar el pasaporte. {error}</T> : !rows ? <Loading /> : (
-          <>
+      {error ? <Card><T color={t.warn}>No se pudo cargar el pasaporte. {error}</T></Card> : !rows ? <Card><Loading /></Card> : (
+        <>
+          {/* Lo que está dentro de esta vista es lo que se comparte como imagen */}
+          <View ref={pageRef} collapsable={false} style={{ backgroundColor: t.surface, borderRadius: radius.md, borderWidth: 1, borderColor: t.line, padding: 12, gap: 12 }}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <View style={{ flex: 1 }}>
+                <T v="label">Pasaporte Muévete · {MONTH_NAMES[page.m - 1]} {page.y}</T>
+                <T style={{ fontFamily: font.bold }} numberOfLines={1}>{profile?.name ?? ''} · {profile?.dept ?? ''}</T>
+              </View>
+              <NetlifeLogo height={22} />
+            </Row>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 6 }}>
               {rows.map((r) => (
                 <Pressable key={r.id} accessibilityRole="button" onPress={() => setOpen(r)} style={{ width: '32%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <Stamp activity={r.activity} at={r.at} number={r.stampNumber} size={100} />
+                  <Stamp activity={r.activity} at={r.at} number={r.stampNumber} status={r.status} size={100} />
                 </Pressable>
               ))}
               {Array.from({ length: slots }, (_, i) => (
@@ -112,14 +148,42 @@ function Sellos() {
             ) : (
               <Row style={{ flexWrap: 'wrap', gap: 6 }}>
                 {ACTIVITY_IDS.map((a) => {
-                  const n = rows.filter((r) => r.activity === a).length;
+                  const n = approved.filter((r) => r.activity === a).length;
                   return n ? <Chip key={a} label={`${ACTIVITIES[a].name} · ${n}`} /> : null;
                 })}
+                {monthData?.page ? <Chip tone="brand" label="Página completa" /> : null}
+                {monthData?.full ? <Chip tone="brand" label="Pasaporte completo" /> : null}
               </Row>
             )}
-          </>
-        )}
-      </Card>
+          </View>
+
+          {rows.length > 0 ? (
+            <Button title={sharing ? 'Preparando imagen…' : 'Compartir esta página'} icon="share" variant="ghost" loading={sharing} onPress={sharePage} />
+          ) : null}
+          {shareMsg ? <T v="small" color={t.warn} style={{ textAlign: 'center' }}>{shareMsg}</T> : null}
+
+          {/* Logros del mes */}
+          <Card>
+            <T v="h3">Logros del mes</T>
+            {[
+              { key: 'page', title: 'Página completa', desc: `${PAGE_SIZE} sellos validados en el mes`, value: approved.length, goal: PAGE_SIZE, done: !!monthData?.page },
+              { key: 'full', title: 'Pasaporte completo', desc: 'Un sello de cada actividad en el mes', value: monthKinds, goal: ACTIVITY_IDS.length, done: !!monthData?.full },
+            ].map((g) => (
+              <View key={g.key} style={{ gap: 6 }}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1 }}>
+                    <T style={{ fontFamily: font.bold }}>{g.title}</T>
+                    <T v="small">{g.desc}</T>
+                  </View>
+                  {g.done ? <Chip tone="ok" label={`Logrado · +${PASSPORT_BONUS[g.key as 'page' | 'full']} pts`} /> : <T v="num">{Math.min(g.value, g.goal)}/{g.goal}</T>}
+                </Row>
+                <Progress value={g.value / g.goal} color={g.done ? t.ok : undefined} />
+              </View>
+            ))}
+            {!isCurrent ? null : <T v="small">Cada logro suma +{PASSPORT_BONUS.page} puntos una vez por mes. Los sellos pendientes cuentan cuando la mesa de control los valida.</T>}
+          </Card>
+        </>
+      )}
 
       <StampDetail log={open} onClose={() => setOpen(null)} />
     </>
@@ -140,7 +204,7 @@ function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () =>
       <Pressable accessibilityLabel="Cerrar" onPress={onClose} style={{ flex: 1, backgroundColor: '#000000AA', justifyContent: 'center', padding: 24 }}>
         <Pressable onPress={() => {}} style={{ maxWidth: 420, width: '100%', alignSelf: 'center' }}>
           <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
-            <Stamp activity={log.activity} at={log.at} number={log.stampNumber} size={190} />
+            <Stamp activity={log.activity} at={log.at} number={log.stampNumber} status={log.status} size={190} />
             <T v="label">{log.stampNumber ? `Sello N° ${log.stampNumber}` : 'Sello'}</T>
             <T v="h2">{ACTIVITIES[log.activity].name}</T>
             <View style={{ alignSelf: 'stretch', gap: 8 }}>
@@ -148,7 +212,10 @@ function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () =>
                 ['Fecha', full.charAt(0).toUpperCase() + full.slice(1)],
                 ['Hora', time],
                 ['Lugar', log.location || '—'],
-                ['Puntos', `+${log.points + log.bonus}${log.bonus ? ` (incluye bono de reto ${log.bonus})` : ''}`],
+                ['Estado', log.status === 'approved' ? 'Validado' : log.status === 'pending' ? 'Pendiente de validación' : 'No validado'],
+                ...(log.reviewerName ? [['Validó', log.reviewerName]] : []),
+                ...(log.note ? [['Nota', log.note]] : []),
+                ['Puntos', log.status === 'approved' ? `+${log.points + log.bonus}${log.bonus ? ` (incluye bono ${log.bonus})` : ''}` : log.status === 'pending' ? `+${ACTIVITIES[log.activity].points} al validarse` : '0'],
               ].map(([k, v]) => (
                 <Row key={k} style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <T v="small">{k}</T>
@@ -156,7 +223,7 @@ function StampDetail({ log, onClose }: { log: ActivityLog | null; onClose: () =>
                 </Row>
               ))}
             </View>
-            <T v="small" style={{ textAlign: 'center' }}>Sello validado al escanear el QR del acceso</T>
+            <T v="small" style={{ textAlign: 'center' }}>{log.status === 'pending' ? 'La mesa de control debe confirmar esta actividad.' : log.status === 'rejected' ? 'La mesa de control no confirmó esta actividad.' : 'Sello validado'}</T>
             <View style={{ alignSelf: 'stretch' }}><Button title="Cerrar" variant="ghost" onPress={onClose} /></View>
           </Card>
         </Pressable>

@@ -21,11 +21,16 @@ function useLive<T>(build: () => ReturnType<typeof query> | null, map: (id: stri
   return { rows, error };
 }
 
-export interface ActivityLog { id: string; activity: ActivityId; location: string; points: number; bonus: number; at: number; stampNumber: number | null }
+export type StampStatus = 'approved' | 'pending' | 'rejected';
+export interface ActivityLog {
+  id: string; activity: ActivityId; location: string; points: number; bonus: number; at: number; stampNumber: number | null;
+  status: StampStatus; reviewerName: string | null; note: string | null;
+}
 
 const toLog = (id: string, d: DocumentData): ActivityLog => ({
   id, activity: d.activity, location: d.location, points: d.points, bonus: d.bonus ?? 0,
   at: d.createdAt?.toMillis?.() ?? Date.now(), stampNumber: d.stampNumber ?? null,
+  status: d.status ?? 'approved', reviewerName: d.reviewerName ?? null, note: d.note ?? null,
 });
 
 export function useRecentActivities(n = 10) {
@@ -103,5 +108,16 @@ export function usePassport(year: number, month: number) {
     () => (user ? query(collection(db, 'users', user.uid, 'activities'), where('createdAt', '>=', start), where('createdAt', '<', end), orderBy('createdAt', 'asc')) : null),
     toLog,
     [user?.uid, year, month],
+  );
+}
+
+export interface PendingStamp { id: string; uid: string; name: string; dept: string; activity: ActivityId; location: string; stampNumber: number; at: number }
+
+/** Sellos que esperan validación (solo responsables y Talento Humano). */
+export function usePendingApprovals() {
+  return useLive<PendingStamp>(
+    () => query(collection(db, 'approvals'), where('status', '==', 'pending'), orderBy('createdAt', 'asc'), limit(100)),
+    (id, d) => ({ id, uid: d.uid, name: d.name, dept: d.dept, activity: d.activity, location: d.location, stampNumber: d.stampNumber, at: d.createdAt?.toMillis?.() ?? 0 }),
+    [],
   );
 }

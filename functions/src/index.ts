@@ -11,8 +11,12 @@ import nodemailer from 'nodemailer';
 import {
   ACTIVITIES,
   advanceChallenge,
-  applyActivity,
   canRegister,
+  creditActivity,
+  PASSPORT_ACHIEVEMENTS,
+  releaseStamp,
+  reserveStamp,
+  type ActivityId,
   dayKey,
   emptyStats,
   isActivityId,
@@ -49,6 +53,14 @@ const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 function requireAuth(req: CallableRequest): string {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Inicia sesión para continuar.');
   return req.auth.uid;
+}
+function requireValidator(req: CallableRequest): string {
+  const uid = requireAuth(req);
+  const tok = req.auth!.token;
+  if (tok.validator !== true && tok.admin !== true) {
+    throw new HttpsError('permission-denied', 'Solo los responsables de validación pueden aprobar sellos.');
+  }
+  return uid;
 }
 function requireAdmin(req: CallableRequest): string {
   const uid = requireAuth(req);
@@ -137,8 +149,9 @@ export const verifyLoginCode = onCall(async (req) => {
   const user = await auth.getUserByEmail(email).catch(() => auth.createUser({ email, emailVerified: true }));
   const dir = (await db.doc(`directory/${email}`).get()).data() ?? {};
   const isAdmin = dir.role === 'admin';
-  if ((user.customClaims?.admin === true) !== isAdmin) {
-    await auth.setCustomUserClaims(user.uid, { ...(user.customClaims ?? {}), admin: isAdmin });
+  const isValidator = dir.role === 'validador';
+  if ((user.customClaims?.admin === true) !== isAdmin || (user.customClaims?.validator === true) !== isValidator) {
+    await auth.setCustomUserClaims(user.uid, { ...(user.customClaims ?? {}), admin: isAdmin, validator: isValidator });
   }
 
   const userRef = db.doc(`users/${user.uid}`);
@@ -148,17 +161,101 @@ export const verifyLoginCode = onCall(async (req) => {
     name: dir.name ?? email.split('@')[0],
     dept: dir.dept ?? 'Sin departamento',
     employeeId: dir.employeeId ?? null,
-    role: isAdmin ? 'admin' : 'colaborador',
+    role: isAdmin ? 'admin' : isValidator ? 'validador' : 'colaborador',
     lastLoginAt: FieldValue.serverTimestamp(),
   };
   if (existing.exists) await userRef.update(profile);
   else await userRef.set({ ...profile, createdAt: FieldValue.serverTimestamp(), stats: emptyStats() });
 
-  return { token: await auth.createCustomToken(user.uid, { admin: isAdmin }) };
+  return { token: await auth.createCustomToken(user.uid, { admin: isAdmin, validator: isValidator }) };
 });
 
 /* =====================================================================
  * 2. Registro de actividad por QR (puntos, rachas, ranking y retos)
+ * ===================================================================== */
+type Tx = FirebaseFirestore.Transaction;
+
+/**
+ * Acredita una actividad validada dentro de una transacción: puntos, racha, retos,
+ * logros del pasaporte, ranking y estadísticas. Hace todas sus lecturas antes de
+ * escribir; el llamador no debe haber escrito nada antes.
+ */
+async function creditInTx(
+  tx: Tx,
+  args: { uid: string; user: FirebaseFirestore.DocumentData; stats: UserStats; activity: ActivityId; at: Date },
+) {
+  const { uid, user, activity, at } = args;
+  const rule = ACTIVITIES[activity];
+  const userRef = db.doc(`users/${uid}`);
+  const day = dayKey(at);
+  const periods = [monthKey(at), weekKey(at)];
+  const dept: string = user.dept ?? 'Sin departamento';
+
+  // Lecturas
+  const scoreRefs = periods.map((p) => db.doc(`scores/${p}_${uid}`));
+  const deptRefs = periods.map((p) => db.doc(`deptScores/${p}_${slug(dept)}`));
+  const statRefs = periods.map((p) => db.doc(`stats/${p}`));
+  const scoreSnaps = await Promise.all(scoreRefs.map((r) => tx.get(r)));
+  const joined = await tx.get(userRef.collection('challenges').where('completed', '==', false));
+  const defs = await Promise.all(joined.docs.map((d) => tx.get(db.doc(`challenges/${d.id}`))));
+
+  // Retos
+  let challengeBonus = 0;
+  const completedChallenges: string[] = [];
+  const challengeUpdates: { ref: FirebaseFirestore.DocumentReference; data: ChallengeProgress }[] = [];
+  joined.docs.forEach((d, i) => {
+    const def = defs[i].data() as ChallengeDef | undefined;
+    if (!def) return;
+    const next = advanceChallenge(def, d.data() as ChallengeProgress, activity, day);
+    if (!next) return;
+    challengeUpdates.push({ ref: d.ref, data: next });
+    if (next.completed) {
+      challengeBonus += def.bonus;
+      completedChallenges.push(def.title);
+    }
+  });
+
+  const { stats: credited, achievements } = creditActivity(args.stats, activity, at, rule.points);
+  credited.totalPoints += challengeBonus;
+  credited.challengesCompleted += completedChallenges.length;
+  const passportBonus = achievements.reduce((n, a) => n + PASSPORT_ACHIEVEMENTS[a].bonus, 0);
+  const bonus = challengeBonus + passportBonus;
+  const gained = rule.points + bonus;
+
+  // Escrituras
+  tx.update(userRef, { stats: credited });
+  challengeUpdates.forEach((u) => tx.update(u.ref, { ...u.data }));
+  periods.forEach((period, i) => {
+    const isNewParticipant = !scoreSnaps[i].exists;
+    const inc = (n: number) => FieldValue.increment(n);
+    tx.set(scoreRefs[i], { period, uid, name: user.name, dept, points: inc(gained), count: inc(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    tx.set(deptRefs[i], { period, dept, points: inc(gained), count: inc(1), participants: inc(isNewParticipant ? 1 : 0) }, { merge: true });
+    tx.set(
+      statRefs[i],
+      {
+        period,
+        total: inc(1),
+        points: inc(gained),
+        participants: inc(isNewParticipant ? 1 : 0),
+        byActivity: { [activity]: inc(1) },
+        pagesCompleted: inc(achievements.includes('page') ? 1 : 0),
+        passportsCompleted: inc(achievements.includes('full') ? 1 : 0),
+      },
+      { merge: true },
+    );
+  });
+
+  return {
+    stats: credited,
+    points: rule.points,
+    bonus,
+    completedChallenges,
+    achievements: achievements.map((a) => PASSPORT_ACHIEVEMENTS[a].title),
+  };
+}
+
+/* =====================================================================
+ * 2. Registro por QR: sello en el pasaporte (validado o pendiente)
  * ===================================================================== */
 export const registerActivity = onCall(async (req) => {
   const uid = requireAuth(req);
@@ -172,6 +269,7 @@ export const registerActivity = onCall(async (req) => {
   }
   const activity = q.activity;
   const rule = ACTIVITIES[activity];
+  const requiresApproval = q.requiresApproval === true;
 
   return db.runTransaction(async (tx) => {
     const now = new Date();
@@ -184,100 +282,69 @@ export const registerActivity = onCall(async (req) => {
     const check = canRegister(stats, activity, now);
     if (!check.ok) throw new HttpsError('failed-precondition', check.message!, { reason: check.reason });
 
-    const day = dayKey(now);
-    const periods = [monthKey(now), weekKey(now)];
-    const dept: string = user.dept ?? 'Sin departamento';
-
-    // Lecturas (todas antes de escribir).
-    const scoreRefs = periods.map((p) => db.doc(`scores/${p}_${uid}`));
-    const deptRefs = periods.map((p) => db.doc(`deptScores/${p}_${slug(dept)}`));
-    const statRefs = periods.map((p) => db.doc(`stats/${p}`));
-    const scoreSnaps = await Promise.all(scoreRefs.map((r) => tx.get(r)));
-    const joined = await tx.get(userRef.collection('challenges').where('completed', '==', false));
-    const defs = await Promise.all(joined.docs.map((d) => tx.get(db.doc(`challenges/${d.id}`))));
-
-    // Retos
-    let bonus = 0;
-    const completedNow: string[] = [];
-    const challengeUpdates: { ref: FirebaseFirestore.DocumentReference; data: ChallengeProgress }[] = [];
-    joined.docs.forEach((d, i) => {
-      const def = defs[i].data() as ChallengeDef | undefined;
-      if (!def) return;
-      const next = advanceChallenge(def, d.data() as ChallengeProgress, activity, day);
-      if (!next) return;
-      challengeUpdates.push({ ref: d.ref, data: next });
-      if (next.completed) {
-        bonus += def.bonus;
-        completedNow.push(def.title);
-      }
-    });
-
-    const points = rule.points;
-    const gained = points + bonus;
-    const nextStats = applyActivity(stats, activity, now, points);
-    nextStats.totalPoints += bonus;
-    nextStats.challengesCompleted += completedNow.length;
-
-    // Escrituras
-    // Cada registro válido es un sello del pasaporte, numerado en orden.
-    const stampNumber = nextStats.totalActivities;
+    const { stats: reserved, stampNumber } = reserveStamp(stats, activity, now);
     const stampedAt = Timestamp.fromDate(now);
-    tx.set(userRef.collection('activities').doc(), {
-      activity,
-      qrId: qr.id,
-      location: q.location ?? '',
-      points,
-      bonus,
-      day,
-      stampNumber,
-      createdAt: stampedAt,
-    });
-    tx.update(userRef, { stats: nextStats });
-    challengeUpdates.forEach((u) => tx.update(u.ref, { ...u.data }));
+    const activityRef = userRef.collection('activities').doc();
+    const base = { activity, qrId: qr.id, location: q.location ?? '', day: dayKey(now), stampNumber, createdAt: stampedAt };
 
-    periods.forEach((period, i) => {
-      const isNewParticipant = !scoreSnaps[i].exists;
-      tx.set(
-        scoreRefs[i],
-        { period, uid, name: user.name, dept, points: FieldValue.increment(gained), count: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() },
-        { merge: true },
-      );
-      tx.set(
-        deptRefs[i],
-        {
-          period,
-          dept,
-          points: FieldValue.increment(gained),
-          count: FieldValue.increment(1),
-          participants: FieldValue.increment(isNewParticipant ? 1 : 0),
-        },
-        { merge: true },
-      );
-      tx.set(
-        statRefs[i],
-        {
-          period,
-          total: FieldValue.increment(1),
-          points: FieldValue.increment(gained),
-          participants: FieldValue.increment(isNewParticipant ? 1 : 0),
-          byActivity: { [activity]: FieldValue.increment(1) },
-        },
-        { merge: true },
-      );
-    });
+    if (requiresApproval) {
+      tx.update(userRef, { stats: reserved });
+      tx.set(activityRef, { ...base, status: 'pending', points: 0, bonus: 0 });
+      tx.set(db.doc(`approvals/${activityRef.id}`), {
+        uid, name: user.name, dept: user.dept ?? 'Sin departamento', activity, activityId: activityRef.id,
+        location: q.location ?? '', stampNumber, status: 'pending', createdAt: stampedAt,
+      });
+      return {
+        activity, activityName: rule.name, location: q.location ?? '', status: 'pending' as const,
+        points: 0, pendingPoints: rule.points, bonus: 0, completedChallenges: [], achievements: [],
+        totalPoints: reserved.totalPoints, streak: reserved.streak, stampNumber, stampedAt: stampedAt.toMillis(),
+      };
+    }
 
+    const c = await creditInTx(tx, { uid, user, stats: reserved, activity, at: now });
+    tx.set(activityRef, { ...base, status: 'approved', points: c.points, bonus: c.bonus });
     return {
-      activity,
-      activityName: rule.name,
-      location: q.location ?? '',
-      points,
-      bonus,
-      completedChallenges: completedNow,
-      totalPoints: nextStats.totalPoints,
-      streak: nextStats.streak,
-      stampNumber,
-      stampedAt: stampedAt.toMillis(),
+      activity, activityName: rule.name, location: q.location ?? '', status: 'approved' as const,
+      points: c.points, pendingPoints: 0, bonus: c.bonus, completedChallenges: c.completedChallenges, achievements: c.achievements,
+      totalPoints: c.stats.totalPoints, streak: c.stats.streak, stampNumber, stampedAt: stampedAt.toMillis(),
     };
+  });
+});
+
+/** Un responsable (mesa de control) aprueba o rechaza un sello pendiente. */
+export const reviewActivity = onCall(async (req) => {
+  const reviewerUid = requireValidator(req);
+  const approvalId = String(req.data?.approvalId ?? '');
+  const approve = req.data?.approve === true;
+  const note = typeof req.data?.note === 'string' ? req.data.note.slice(0, 200) : null;
+  if (!approvalId) throw new HttpsError('invalid-argument', 'Falta el sello a revisar.');
+
+  return db.runTransaction(async (tx) => {
+    const apRef = db.doc(`approvals/${approvalId}`);
+    const ap = (await tx.get(apRef)).data();
+    if (!ap) throw new HttpsError('not-found', 'Este sello ya no existe.');
+    if (ap.status !== 'pending') throw new HttpsError('failed-precondition', `Este sello ya fue ${ap.status === 'approved' ? 'aprobado' : 'rechazado'}.`);
+    if (ap.uid === reviewerUid) throw new HttpsError('permission-denied', 'No puedes validar tu propio sello.');
+
+    const userRef = db.doc(`users/${ap.uid}`);
+    const actRef = userRef.collection('activities').doc(ap.activityId);
+    const [userSnap, reviewerSnap] = await Promise.all([tx.get(userRef), tx.get(db.doc(`users/${reviewerUid}`))]);
+    const user = userSnap.data();
+    if (!user) throw new HttpsError('not-found', 'El colaborador ya no existe.');
+    const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
+    const at = (ap.createdAt as Timestamp).toDate();
+    const review = { reviewedBy: reviewerUid, reviewerName: reviewerSnap.get('name') ?? null, reviewedAt: FieldValue.serverTimestamp(), note };
+
+    if (!approve) {
+      tx.update(userRef, { stats: releaseStamp(stats, ap.activity, at) });
+      tx.update(actRef, { status: 'rejected', ...review });
+      tx.update(apRef, { status: 'rejected', ...review });
+      return { status: 'rejected' as const };
+    }
+    const c = await creditInTx(tx, { uid: ap.uid, user, stats, activity: ap.activity, at });
+    tx.update(actRef, { status: 'approved', points: c.points, bonus: c.bonus, ...review });
+    tx.update(apRef, { status: 'approved', ...review });
+    return { status: 'approved' as const, points: c.points, bonus: c.bonus };
   });
 });
 
@@ -322,6 +389,7 @@ export const adminStats = onCall(async (req) => {
     db.collection('scores').where('period', '==', month).orderBy('points', 'desc').limit(200).get(),
     db.collection('directory').where('active', '==', true).count().get(),
   ]);
+  const pending = await db.collection('approvals').where('status', '==', 'pending').count().get();
 
   const scoreByDept = new Map(deptScores.docs.map((d) => [d.get('dept') as string, d.data()]));
   const ms = monthStat.data() ?? {};
@@ -332,6 +400,9 @@ export const adminStats = onCall(async (req) => {
     registrations: ms.total ?? 0,
     points: ms.points ?? 0,
     byActivity: ms.byActivity ?? {},
+    pagesCompleted: ms.pagesCompleted ?? 0,
+    passportsCompleted: ms.passportsCompleted ?? 0,
+    pendingApprovals: pending.data().count,
     weekly: weekStats.map((s, i) => ({ week: weeks[i], total: s.get('total') ?? 0 })),
     departments: depts.docs.map((d) => {
       const name = d.get('name') as string;

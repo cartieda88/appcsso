@@ -36,16 +36,23 @@ export default function Registrar() {
     const r = state.result;
     return (
       <Screen>
-        <T v="h2">Registro confirmado</T>
+        <T v="h2">{r.status === 'pending' ? 'Sello pendiente' : 'Registro confirmado'}</T>
         <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
           <StampDrop>
-            <Stamp activity={r.activity} at={r.stampedAt} number={r.stampNumber} size={200} />
+            <Stamp activity={r.activity} at={r.stampedAt} number={r.stampNumber} status={r.status} size={200} />
           </StampDrop>
           <T v="label">Sello N° {r.stampNumber} en tu pasaporte</T>
           <T v="h2">{r.activityName}</T>
           <T v="small">{r.location}</T>
-          <T v="h1" color={t.brandText} style={{ fontSize: 44, lineHeight: 50 }}>+{r.points + r.bonus}</T>
-          <T v="small">puntos · total {r.totalPoints} · racha de {r.streak} día{r.streak === 1 ? '' : 's'}</T>
+          {r.status === 'pending' ? (
+            <T style={{ textAlign: 'center' }}>La mesa de control debe confirmar tu participación. Recibirás +{r.pendingPoints} puntos cuando lo valide.</T>
+          ) : (
+            <>
+              <T v="h1" color={t.brandText} style={{ fontSize: 44, lineHeight: 50 }}>+{r.points + r.bonus}</T>
+              <T v="small">puntos · total {r.totalPoints} · racha de {r.streak} día{r.streak === 1 ? '' : 's'}</T>
+            </>
+          )}
+          {r.achievements.map((a) => <Chip key={a} tone="brand" label={`¡${a}! +50 pts`} />)}
           {r.completedChallenges.map((c) => <Chip key={c} tone="brand" label={`Reto cumplido: ${c} (+bono)`} />)}
         </Card>
         <Button title="Ver mi pasaporte" icon="passport" onPress={() => { again(); router.navigate('/pasaporte'); }} />

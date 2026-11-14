@@ -23,7 +23,15 @@ export interface UserStats {
   earlyBird: boolean;
   today: { day: string; counts: Partial<Record<ActivityId, number>> };
   challengesCompleted: number;
+  stampsIssued?: number;
+  months?: Record<string, { stamps: number; kinds: ActivityId[]; days: string[]; page: boolean; full: boolean }>;
+  pagesCompleted?: number;
+  passportsCompleted?: number;
 }
+
+/** Logros del pasaporte (mismos valores que functions/src/rules.ts). */
+export const PAGE_SIZE = 9;
+export const PASSPORT_BONUS = { page: 50, full: 50 };
 
 export const LEVELS = [
   { name: 'Inicial', min: 0 },
@@ -42,7 +50,7 @@ export function levelFor(points: number) {
   return { index: i, cur, next, progress };
 }
 
-export type BadgeIcon = ActivityId | 'check' | 'fire' | 'star' | 'sun' | 'flag';
+export type BadgeIcon = ActivityId | 'check' | 'fire' | 'star' | 'sun' | 'flag' | 'passport';
 export interface Badge { name: string; desc: string; icon: BadgeIcon; earned: boolean; progress?: number }
 
 export function badgesFor(s: UserStats): Badge[] {
@@ -60,6 +68,8 @@ export function badgesFor(s: UserStats): Badge[] {
     b('Nadador', '10 sesiones de piscina', 'piscina', c('piscina'), 10),
     b('Fuerza', '15 sesiones de gimnasio', 'gimnasio', c('gimnasio'), 15),
     b('Reto cumplido', 'Completa un reto', 'flag', s.challengesCompleted, 1),
+    b('Página completa', `${PAGE_SIZE} sellos en un mes`, 'passport', s.pagesCompleted ?? 0, 1),
+    b('Pasaporte completo', 'Las 4 actividades en un mes', 'star', s.passportsCompleted ?? 0, 1),
   ];
 }
 

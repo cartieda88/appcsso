@@ -70,6 +70,8 @@ export default function Admin() {
               ['Participación', data.headcount ? `${Math.round((data.participants / data.headcount) * 100)}%` : '—', 'del personal'],
               ['Registros del mes', data.registrations.toLocaleString('es-EC'), `${data.points.toLocaleString('es-EC')} puntos`],
               ['Frecuencia', data.participants ? (data.registrations / data.participants).toFixed(1) : '0', 'registros por persona'],
+              ['Pasaportes completos', String(data.passportsCompleted), `${data.pagesCompleted} páginas completas`],
+              ['Sellos por validar', String(data.pendingApprovals), 'en la mesa de control'],
             ].map(([k, v, s]) => (
               <Card key={k} style={{ flexBasis: '47%', flexGrow: 1, gap: 2 }}>
                 <T v="small">{k}</T>

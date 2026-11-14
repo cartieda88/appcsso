@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  addDays, advanceChallenge, applyActivity, canRegister, dayKey, emptyStats, monthKey, normalizeEmail, parseQr, weekKey,
+  addDays, advanceChallenge, applyActivity, canRegister, creditActivity, dayKey, emptyStats, monthKey, normalizeEmail, parseQr,
+  PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
   type ChallengeDef,
 } from '../src/rules';
 
@@ -73,4 +74,57 @@ test('QR y correos', () => {
   assert.equal(parseQr('https://evil.example'), null);
   assert.equal(normalizeEmail('  MF.Ruiz@Netlife.net.ec '), 'mf.ruiz@netlife.net.ec');
   assert.equal(normalizeEmail('no-es-correo'), null);
+});
+
+test('pasaporte: sellos numerados y cupo reservado aunque esté pendiente', () => {
+  const r1 = reserveStamp(emptyStats(), 'futbol', morning);
+  assert.equal(r1.stampNumber, 1);
+  assert.equal(canRegister(r1.stats, 'futbol', at('2026-11-13T20:00:00Z')).reason, 'daily-limit');
+  assert.equal(r1.stats.totalPoints, 0);
+  // Rechazo: libera el cupo del día
+  const released = releaseStamp(r1.stats, 'futbol', morning);
+  assert.ok(canRegister(released, 'futbol', at('2026-11-13T20:00:00Z')).ok);
+  // El siguiente sello sigue la numeración aunque el anterior se haya rechazado
+  assert.equal(reserveStamp(released, 'gradas', morning).stampNumber, 2);
+});
+
+test('pasaporte completo: 4 actividades en el mes dan premio una sola vez', () => {
+  let s = emptyStats();
+  const acts = ['gradas', 'gimnasio', 'piscina', 'futbol'] as const;
+  let got: string[] = [];
+  acts.forEach((a, i) => {
+    const r = creditActivity(s, a, at(`2026-11-0${i + 2}T15:00:00Z`), 10);
+    s = r.stats; got = got.concat(r.achievements);
+  });
+  assert.deepEqual(got, ['full']);
+  assert.equal(s.totalPoints, 40 + PASSPORT_ACHIEVEMENTS.full.bonus);
+  assert.equal(s.passportsCompleted, 1);
+  assert.equal(creditActivity(s, 'futbol', at('2026-11-20T15:00:00Z'), 10).achievements.length, 0);
+  // En diciembre se puede volver a ganar
+  let d = s; got = [];
+  acts.forEach((a, i) => { const r = creditActivity(d, a, at(`2026-12-0${i + 2}T15:00:00Z`), 10); d = r.stats; got = got.concat(r.achievements); });
+  assert.deepEqual(got, ['full']);
+});
+
+test('página completa: 9 sellos validados en el mes', () => {
+  let s = emptyStats();
+  const got: string[] = [];
+  for (let i = 1; i <= 10; i++) {
+    const r = creditActivity(s, 'gradas', at(`2026-11-${String(i).padStart(2, '0')}T15:00:00Z`), 10);
+    s = r.stats; got.push(...r.achievements);
+  }
+  assert.deepEqual(got, ['page']);
+  assert.equal(s.months['2026-11'].stamps, 10);
+  assert.equal(s.streak, 10);
+});
+
+test('aprobación tardía de un día anterior no rompe la racha', () => {
+  let s = creditActivity(emptyStats(), 'gradas', at('2026-11-10T15:00:00Z'), 10).stats;
+  s = creditActivity(s, 'gradas', at('2026-11-11T15:00:00Z'), 10).stats;
+  s = creditActivity(s, 'futbol', at('2026-11-09T22:00:00Z'), 20).stats; // aprobado tarde
+  assert.equal(s.streak, 2);
+  assert.equal(s.activeDays, 3);
+  assert.equal(s.lastActiveDay, '2026-11-11');
+  s = creditActivity(s, 'piscina', at('2026-11-11T22:00:00Z'), 15).stats; // mismo día, no suma día activo
+  assert.equal(s.activeDays, 3);
 });

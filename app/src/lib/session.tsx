@@ -11,7 +11,7 @@ export interface Profile {
   email: string;
   dept: string;
   employeeId: string | null;
-  role: 'admin' | 'colaborador';
+  role: 'admin' | 'validador' | 'colaborador';
   stats: UserStats;
 }
 
@@ -19,6 +19,8 @@ interface Session {
   ready: boolean;
   user: User | null;
   isAdmin: boolean;
+  /** Puede aprobar sellos pendientes (mesa de control o Talento Humano). */
+  isValidator: boolean;
   profile: Profile | null;
   signInWithCode: (email: string, code: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -30,13 +32,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isValidator, setIsValidator] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(
     () =>
       onAuthStateChanged(auth, async (u) => {
         setUser(u);
-        setIsAdmin(u ? (await u.getIdTokenResult()).claims.admin === true : false);
+        const claims = u ? (await u.getIdTokenResult()).claims : {};
+        setIsAdmin(claims.admin === true);
+        setIsValidator(claims.validator === true || claims.admin === true);
         if (!u) setProfile(null);
         setReady(true);
       }),
@@ -52,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     ready,
     user,
     isAdmin,
+    isValidator,
     profile,
     async signInWithCode(email, code) {
       const { data } = await verifyLoginCode({ email, code });

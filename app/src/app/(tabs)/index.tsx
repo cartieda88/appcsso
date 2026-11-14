@@ -11,7 +11,7 @@ import { font, radius, useTheme } from '@/lib/theme';
 
 export default function Inicio() {
   const t = useTheme();
-  const { profile, isAdmin, signOut } = useSession();
+  const { profile, isAdmin, isValidator, signOut } = useSession();
   const recent = useRecentActivities(8);
   if (!profile) return <Screen><Loading /></Screen>;
 
@@ -24,13 +24,22 @@ export default function Inicio() {
     <Screen>
       <Row style={{ justifyContent: 'space-between' }}>
         <BrandHeader />
-        {isAdmin ? (
-          <Link href="/admin" asChild>
-            <Pressable accessibilityLabel="Panel de Talento Humano" style={{ width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="chart" color={t.ink} />
-            </Pressable>
-          </Link>
-        ) : null}
+        <Row style={{ gap: 8 }}>
+          {isValidator ? (
+            <Link href="/validar" asChild>
+              <Pressable accessibilityLabel="Validar sellos pendientes" style={headerBtn(t)}>
+                <Icon name="check" color={t.ink} />
+              </Pressable>
+            </Link>
+          ) : null}
+          {isAdmin ? (
+            <Link href="/admin" asChild>
+              <Pressable accessibilityLabel="Panel de Talento Humano" style={headerBtn(t)}>
+                <Icon name="chart" color={t.ink} />
+              </Pressable>
+            </Link>
+          ) : null}
+        </Row>
       </Row>
 
       <View style={{ backgroundColor: t.hero, borderRadius: radius.lg, padding: 18, gap: 14, overflow: 'hidden' }}>
@@ -81,9 +90,10 @@ export default function Inicio() {
             <ActivityDot activity={r.activity} size={36} />
             <View style={{ flex: 1 }}>
               <T style={{ fontFamily: font.semibold }}>{ACTIVITIES[r.activity].name}</T>
-              <T v="small" numberOfLines={1}>{relativeDay(r.at)}, {new Date(r.at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' })} · {r.location}</T>
+              <T v="small" numberOfLines={1}>{relativeDay(r.at)}, {new Date(r.at).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil' })} · {r.location}</T>
             </View>
-            <T v="num" color={t.brandText}>+{r.points + r.bonus}</T>
+            {r.status === 'approved' ? <T v="num" color={t.brandText}>+{r.points + r.bonus}</T>
+              : <Chip tone={r.status === 'pending' ? 'neutral' : 'warn'} label={r.status === 'pending' ? 'Pendiente' : 'No validado'} />}
           </Row>
         ))}
       </Card>
@@ -100,3 +110,8 @@ export default function Inicio() {
     </Screen>
   );
 }
+
+const headerBtn = (t: ReturnType<typeof useTheme>) => ({
+  width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface,
+  alignItems: 'center' as const, justifyContent: 'center' as const,
+});

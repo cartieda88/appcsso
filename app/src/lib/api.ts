@@ -14,9 +14,14 @@ export interface RegisterResult {
   activity: ActivityId;
   activityName: string;
   location: string;
+  /** "pending": el sello espera la validación de la mesa de control. */
+  status: 'approved' | 'pending';
   points: number;
+  pendingPoints: number;
   bonus: number;
   completedChallenges: string[];
+  /** Logros del pasaporte ganados con este sello ("Página completa", "Pasaporte completo"). */
+  achievements: string[];
   totalPoints: number;
   streak: number;
   stampNumber: number;
@@ -31,10 +36,15 @@ export interface AdminStats {
   registrations: number;
   points: number;
   byActivity: Partial<Record<ActivityId, number>>;
+  pagesCompleted: number;
+  passportsCompleted: number;
+  pendingApprovals: number;
   weekly: { week: string; total: number }[];
   departments: { name: string; headcount: number; participants: number; points: number; count: number }[];
   people: { uid: string; name: string; dept: string; points: number; count: number; updatedAt: number | null }[];
 }
+export const reviewActivity = call<{ approvalId: string; approve: boolean; note?: string }, { status: 'approved' | 'rejected'; points?: number; bonus?: number }>('reviewActivity');
+
 export const adminStats = call<{ month?: string }, AdminStats>('adminStats');
 
 /** Mensaje legible para mostrar al colaborador. */

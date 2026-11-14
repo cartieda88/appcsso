@@ -5,6 +5,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isValidator() { return signedIn() && (request.auth.token.validator == true || isAdmin()); }
 
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
@@ -22,6 +23,8 @@ service cloud.firestore {
     match /challenges/{id}  { allow read: if signedIn(); allow write: if false; }
     match /config/{id}      { allow read: if signedIn(); allow write: if false; }
     match /stats/{id}       { allow read: if isAdmin(); allow write: if false; }
+    // Sellos pendientes: los ve la mesa de control; se aprueban con la función reviewActivity.
+    match /approvals/{id}   { allow read: if isValidator(); allow write: if false; }
 
     // Nunca accesibles desde la app: tokens de QR, códigos de ingreso y nómina.
     match /qrCodes/{id}    { allow read, write: if false; }

@@ -13,7 +13,7 @@ import { useTheme } from '@/lib/theme';
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
-  const { ready, user, isAdmin } = useSession();
+  const { ready, user, isAdmin, isValidator } = useSession();
   const t = useTheme();
   const scheme = useColorScheme();
   useEffect(() => { if (ready) SplashScreen.hideAsync(); }, [ready]);
@@ -26,6 +26,9 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Protected guard={isAdmin}>
             <Stack.Screen name="admin" />
+          </Stack.Protected>
+          <Stack.Protected guard={isValidator}>
+            <Stack.Screen name="validar" />
           </Stack.Protected>
         </Stack.Protected>
         <Stack.Protected guard={!user}>

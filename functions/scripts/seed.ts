@@ -35,7 +35,8 @@ const QR_CODES = [
   { id: 'GR-B1', activity: 'gradas', location: 'Edificio B · Piso 1' },
   { id: 'GYM-01', activity: 'gimnasio', location: 'Gimnasio · Recepción' },
   { id: 'PIS-01', activity: 'piscina', location: 'Piscina · Ingreso a vestidores' },
-  { id: 'FUT-01', activity: 'futbol', location: 'Cancha · Mesa de control' },
+  // requiresApproval: el sello queda pendiente hasta que la mesa de control lo apruebe.
+  { id: 'FUT-01', activity: 'futbol', location: 'Cancha · Mesa de control', requiresApproval: true },
 ];
 
 async function main() {
@@ -48,7 +49,7 @@ async function main() {
     const ref = db.doc(`qrCodes/${q.id}`);
     const existing = await ref.get();
     const token = !rotate && existing.exists ? existing.get('token') : randomBytes(12).toString('hex');
-    batch.set(ref, { ...q, token, active: true }, { merge: true });
+    batch.set(ref, { requiresApproval: false, ...q, token, active: true }, { merge: true });
   }
   await batch.commit();
   console.log(`Listo: ${DEPARTMENTS.length} departamentos, ${CHALLENGES.length} retos, ${QR_CODES.length} códigos QR${rotate ? ' (tokens nuevos)' : ''}.`);

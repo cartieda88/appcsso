@@ -2,7 +2,8 @@
  * Importa la nómina que autoriza el ingreso a la app.
  * Uso: npm run import-directory -- nomina.csv
  * CSV con encabezado: correo,nombre,departamento,cedula,rol
- *   rol = "admin" para Talento Humano / Comité; vacío para colaboradores.
+ *   rol = "admin" para Talento Humano / Comité, "validador" para la mesa de control
+ *   (aprueba sellos pendientes, p. ej. fútbol); vacío para colaboradores.
  * Los correos que no estén en el archivo no se borran; para dar de baja pon active=false en Firestore.
  */
 import { readFileSync } from 'node:fs';
@@ -29,7 +30,7 @@ async function main() {
       name: c[iName],
       dept: c[iDept],
       employeeId: iId >= 0 ? c[iId] || null : null,
-      role: iRole >= 0 && c[iRole]?.toLowerCase() === 'admin' ? 'admin' : 'colaborador',
+      role: (() => { const r = iRole >= 0 ? c[iRole]?.toLowerCase() : ''; return r === 'admin' || r === 'validador' ? r : 'colaborador'; })(),
       active: true,
     }, { merge: true });
     if (++n % 400 === 0) { await batch.commit(); batch = db.batch(); }

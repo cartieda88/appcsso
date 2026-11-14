@@ -74,23 +74,51 @@ export function addDays(day: string, n: number): string {
   return t.toISOString().slice(0, 10);
 }
 
+export interface MonthPassport {
+  /** Sellos validados en el mes. */
+  stamps: number;
+  /** Actividades distintas con sello en el mes. */
+  kinds: ActivityId[];
+  /** Días del mes con al menos un sello validado. */
+  days: string[];
+  /** Logros del mes ya otorgados (para no premiar dos veces). */
+  page: boolean;
+  full: boolean;
+}
+
 export interface UserStats {
   totalPoints: number;
+  /** Actividades validadas (con puntos). */
   totalActivities: number;
+  /** Sellos emitidos, incluidos los pendientes de validación. Da el N° de sello. */
+  stampsIssued: number;
   counts: Partial<Record<ActivityId, number>>;
   streak: number;
   bestStreak: number;
   lastActiveDay: string | null;
   activeDays: number;
   earlyBird: boolean;
-  /** Registros del día en curso, para aplicar límites. */
+  /** Registros del día en curso (validados o pendientes), para aplicar límites. */
   today: { day: string; counts: Partial<Record<ActivityId, number>>; last: Partial<Record<ActivityId, number>> };
   challengesCompleted: number;
+  /** Pasaporte por mes, clave "2026-11". */
+  months: Record<string, MonthPassport>;
+  pagesCompleted: number;
+  passportsCompleted: number;
 }
+
+/* ---------- Pasaporte completo ---------- */
+export const PAGE_SIZE = 9;
+export const PASSPORT_ACHIEVEMENTS = {
+  page: { title: 'Página completa', description: `${PAGE_SIZE} sellos en un mes`, bonus: 50 },
+  full: { title: 'Pasaporte completo', description: 'Las 4 actividades en un mismo mes', bonus: 50 },
+} as const;
+export type PassportAchievement = keyof typeof PASSPORT_ACHIEVEMENTS;
 
 export const emptyStats = (): UserStats => ({
   totalPoints: 0,
   totalActivities: 0,
+  stampsIssued: 0,
   counts: {},
   streak: 0,
   bestStreak: 0,
@@ -99,7 +127,12 @@ export const emptyStats = (): UserStats => ({
   earlyBird: false,
   today: { day: '', counts: {}, last: {} },
   challengesCompleted: 0,
+  months: {},
+  pagesCompleted: 0,
+  passportsCompleted: 0,
 });
+
+const clone = (prev: UserStats): UserStats => JSON.parse(JSON.stringify({ ...emptyStats(), ...prev }));
 
 export type RejectReason = 'daily-limit' | 'cooldown';
 
@@ -130,25 +163,80 @@ export function canRegister(stats: UserStats, activity: ActivityId, now: Date): 
   return { ok: true };
 }
 
-/** Devuelve las estadísticas actualizadas tras un registro válido. */
-export function applyActivity(prev: UserStats, activity: ActivityId, now: Date, points: number): UserStats {
-  const s: UserStats = JSON.parse(JSON.stringify({ ...emptyStats(), ...prev }));
+/**
+ * Paso 1 de todo registro (validado o pendiente): ocupa el cupo del día y
+ * emite el número de sello.
+ */
+export function reserveStamp(prev: UserStats, activity: ActivityId, now: Date): { stats: UserStats; stampNumber: number } {
+  const s = clone(prev);
   const day = dayKey(now);
   if (s.today.day !== day) s.today = { day, counts: {}, last: {} };
   s.today.counts[activity] = (s.today.counts[activity] ?? 0) + 1;
   s.today.last[activity] = now.getTime();
+  s.stampsIssued = Math.max(s.stampsIssued, s.totalActivities) + 1;
+  return { stats: s, stampNumber: s.stampsIssued };
+}
 
-  if (s.lastActiveDay !== day) {
-    s.streak = s.lastActiveDay === addDays(day, -1) ? s.streak + 1 : 1;
+/** Libera el cupo del día de un sello rechazado (si sigue siendo el mismo día). */
+export function releaseStamp(prev: UserStats, activity: ActivityId, at: Date): UserStats {
+  const s = clone(prev);
+  if (s.today.day === dayKey(at)) s.today.counts[activity] = Math.max(0, (s.today.counts[activity] ?? 0) - 1);
+  return s;
+}
+
+/**
+ * Paso 2: acredita una actividad validada (puntos, racha, conteos y pasaporte del mes).
+ * `at` es la hora del registro, no la de la aprobación.
+ */
+export function creditActivity(
+  prev: UserStats,
+  activity: ActivityId,
+  at: Date,
+  points: number,
+): { stats: UserStats; achievements: PassportAchievement[] } {
+  const s = clone(prev);
+  const day = dayKey(at);
+  const ym = monthKey(at).slice(1);
+  const m: MonthPassport = s.months[ym] ?? { stamps: 0, kinds: [], days: [], page: false, full: false };
+
+  // Racha y días activos. Si se aprueba tarde un día anterior al último activo,
+  // cuenta como día activo pero no recalcula la racha.
+  if (!m.days.includes(day)) {
+    m.days.push(day);
     s.activeDays += 1;
+  }
+  if (!s.lastActiveDay || day > s.lastActiveDay) {
+    s.streak = s.lastActiveDay === addDays(day, -1) ? s.streak + 1 : 1;
     s.lastActiveDay = day;
   }
   s.bestStreak = Math.max(s.bestStreak, s.streak);
   s.totalPoints += points;
   s.totalActivities += 1;
   s.counts[activity] = (s.counts[activity] ?? 0) + 1;
-  if (localHour(now) < 8) s.earlyBird = true;
-  return s;
+  if (localHour(at) < 8) s.earlyBird = true;
+
+  // Pasaporte del mes
+  m.stamps += 1;
+  if (!m.kinds.includes(activity)) m.kinds.push(activity);
+  const achievements: PassportAchievement[] = [];
+  if (!m.page && m.stamps >= PAGE_SIZE) {
+    m.page = true;
+    s.pagesCompleted += 1;
+    achievements.push('page');
+  }
+  if (!m.full && m.kinds.length >= Object.keys(ACTIVITIES).length) {
+    m.full = true;
+    s.passportsCompleted += 1;
+    achievements.push('full');
+  }
+  for (const a of achievements) s.totalPoints += PASSPORT_ACHIEVEMENTS[a].bonus;
+  s.months[ym] = m;
+  return { stats: s, achievements };
+}
+
+/** Registro validado de inmediato (reserva + acreditación). */
+export function applyActivity(prev: UserStats, activity: ActivityId, now: Date, points: number): UserStats {
+  return creditActivity(reserveStamp(prev, activity, now).stats, activity, now, points).stats;
 }
 
 export interface ChallengeDef {
