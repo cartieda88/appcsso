@@ -95,7 +95,7 @@ Pruebas unitarias de las reglas: `cd functions && npm test`.
 
 ## Pendiente de definir con el Comité / TI
 
-- Logo oficial y manual de marca (hoy se usan los colores y la tipografía Figtree de Netlife Access, con un ícono provisional).
+- Manual de marca: el logo oficial ya está aplicado (ícono, splash, encabezado e ingreso; original en `app/assets/images/brand/`). Los colores y la tipografía Figtree se tomaron de Netlife Access.
 - Cuenta de correo para enviar los códigos.
 - Nómina inicial y número de personas por departamento.
 - Política de privacidad y consentimiento según la Ley Orgánica de Protección de Datos Personales.

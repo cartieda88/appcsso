@@ -1,6 +1,7 @@
 import { Link } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
+import { BrandHeader } from '@/components/brand';
 import { Icon } from '@/components/icon';
 import { ActivityDot, Button, Card, Chip, Empty, Loading, Row, Screen, T } from '@/components/ui';
 import { useRecentActivities } from '@/lib/data';
@@ -22,12 +23,7 @@ export default function Inicio() {
   return (
     <Screen>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Row>
-          <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: t.brand, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="gradas" color={t.brandInk} size={22} />
-          </View>
-          <View><T v="h3">Muévete</T><T v="label" style={{ fontSize: 10 }}>Netlife · CSS</T></View>
-        </Row>
+        <BrandHeader />
         {isAdmin ? (
           <Link href="/admin" asChild>
             <Pressable accessibilityLabel="Panel de Talento Humano" style={{ width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: t.line, backgroundColor: t.surface, alignItems: 'center', justifyContent: 'center' }}>

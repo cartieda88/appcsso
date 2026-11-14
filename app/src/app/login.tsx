@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
 
-import { Icon } from '@/components/icon';
-import { Button, Card, Row, Screen, T } from '@/components/ui';
+import { NetlifeLogo } from '@/components/brand';
+import { Button, Card, Screen, T } from '@/components/ui';
 import { errorMessage, requestLoginCode } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
@@ -46,15 +46,10 @@ export default function Login() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: t.bg }}>
       <Screen>
         <View style={{ gap: 22, paddingTop: 48 }}>
-          <Row style={{ gap: 12 }}>
-            <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: t.brand, alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="gradas" color={t.brandInk} size={28} />
-            </View>
-            <View>
-              <T v="label">Netlife</T>
-              <T v="h3">Comité de Seguridad y Salud</T>
-            </View>
-          </Row>
+          <NetlifeLogo height={58} />
+          <View style={{ gap: 2 }}>
+            <T v="label">Comité de Seguridad y Salud</T>
+          </View>
           <T v="h1" style={{ fontSize: 44, lineHeight: 48 }}>Muévete</T>
           <T color={t.muted}>Registra tus actividades de gimnasio, piscina, fútbol y gradas, suma puntos y compite con tu departamento.</T>
 
