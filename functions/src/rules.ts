@@ -3,7 +3,7 @@
  * Funciones puras: se prueban en test/rules.test.ts y no dependen de Firebase.
  */
 
-export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol';
+export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol' | 'pausa' | 'pasos';
 
 export interface ActivityRule {
   name: string;
@@ -19,7 +19,21 @@ export const ACTIVITIES: Record<ActivityId, ActivityRule> = {
   gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, cooldownMinutes: 0 },
   piscina: { name: 'Piscina', points: 15, maxPerDay: 1, cooldownMinutes: 0 },
   futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, cooldownMinutes: 0 },
+  // Se registran desde la app, sin QR:
+  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, cooldownMinutes: 60 },
+  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, cooldownMinutes: 0 },
 };
+
+/** Actividades con QR en un lugar físico; "Pasaporte completo" pide un sello de cada una. */
+export const QR_ACTIVITIES: ActivityId[] = ['gradas', 'gimnasio', 'piscina', 'futbol'];
+
+/* ---------- Pausas activas y pasos ---------- */
+/** Duración mínima de la rutina guiada para que la pausa cuente. */
+export const PAUSE_MIN_SECONDS = 120;
+/** Meta diaria de pasos por defecto (se puede cambiar en config/steps.dailyGoal). */
+export const STEP_GOAL_DEFAULT = 8000;
+/** Tope de pasos aceptados por día (filtra errores del sensor). */
+export const STEPS_MAX_PER_DAY = 70000;
 
 export const isActivityId = (v: unknown): v is ActivityId =>
   typeof v === 'string' && Object.prototype.hasOwnProperty.call(ACTIVITIES, v);
@@ -111,7 +125,7 @@ export interface UserStats {
 export const PAGE_SIZE = 9;
 export const PASSPORT_ACHIEVEMENTS = {
   page: { title: 'Página completa', description: `${PAGE_SIZE} sellos en un mes`, bonus: 50 },
-  full: { title: 'Pasaporte completo', description: 'Las 4 actividades en un mismo mes', bonus: 50 },
+  full: { title: 'Pasaporte completo', description: 'Gradas, gimnasio, piscina y fútbol en un mismo mes', bonus: 50 },
 } as const;
 export type PassportAchievement = keyof typeof PASSPORT_ACHIEVEMENTS;
 
@@ -224,7 +238,7 @@ export function creditActivity(
     s.pagesCompleted += 1;
     achievements.push('page');
   }
-  if (!m.full && m.kinds.length >= Object.keys(ACTIVITIES).length) {
+  if (!m.full && QR_ACTIVITIES.every((a) => m.kinds.includes(a))) {
     m.full = true;
     s.passportsCompleted += 1;
     achievements.push('full');
@@ -283,4 +297,30 @@ export function normalizeEmail(email: unknown): string | null {
   if (typeof email !== 'string') return null;
   const e = email.trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : null;
+}
+
+/** Fin del día local (23:59) de una clave "YYYY-MM-DD", como instante. Ecuador: UTC-5 fijo. */
+export function endOfLocalDay(day: string): Date {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 23 + 5, 59));
+}
+
+/* ---------- Recordatorios de eventos ---------- */
+export type ReminderKind = 'd1' | 'd0';
+/** Hora local del recordatorio del mismo día. */
+export const SAME_DAY_REMINDER_HOUR = 7;
+
+/**
+ * Qué recordatorios corresponde enviar ahora para un evento:
+ * - d1: entre 24 h y 2 h antes, si el evento no es hoy (mañana / en 24 horas).
+ * - d0: el mismo día desde las 07:00, o 3 h antes si empieza más temprano, y antes del inicio.
+ */
+export function dueReminders(startsAt: Date, now: Date, sent: Partial<Record<ReminderKind, boolean>>): ReminderKind[] {
+  const ms = startsAt.getTime() - now.getTime();
+  if (ms <= 0) return [];
+  const out: ReminderKind[] = [];
+  const sameDay = dayKey(startsAt) === dayKey(now);
+  if (!sent.d1 && !sameDay && ms <= 24 * 3600_000 && ms > 2 * 3600_000) out.push('d1');
+  if (!sent.d0 && sameDay && (localHour(now) >= SAME_DAY_REMINDER_HOUR || ms <= 3 * 3600_000)) out.push('d0');
+  return out;
 }

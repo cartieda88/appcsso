@@ -5,14 +5,22 @@ import * as logger from 'firebase-functions/logger';
 import { defineSecret, defineString } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
+
+import { sendPush } from './push';
 
 import {
   ACTIVITIES,
   advanceChallenge,
   canRegister,
   creditActivity,
+  dueReminders,
+  endOfLocalDay,
+  PAUSE_MIN_SECONDS,
+  STEP_GOAL_DEFAULT,
+  STEPS_MAX_PER_DAY,
   PASSPORT_ACHIEVEMENTS,
   releaseStamp,
   reserveStamp,
@@ -418,6 +426,228 @@ export const adminStats = onCall(async (req) => {
       updatedAt: (d.get('updatedAt') as Timestamp | undefined)?.toMillis() ?? null,
     })),
   };
+});
+
+
+/* =====================================================================
+ * 5. Pausas activas (sin QR: rutina guiada en la app)
+ * ===================================================================== */
+export const registerPause = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const seconds = Number(req.data?.seconds ?? 0);
+  if (!Number.isFinite(seconds) || seconds < PAUSE_MIN_SECONDS) {
+    throw new HttpsError('failed-precondition', `Completa la rutina guiada (mínimo ${Math.round(PAUSE_MIN_SECONDS / 60)} minutos) para registrar la pausa.`);
+  }
+  return db.runTransaction(async (tx) => {
+    const now = new Date();
+    const userRef = db.doc(`users/${uid}`);
+    const user = (await tx.get(userRef)).data();
+    if (!user) throw new HttpsError('not-found', 'Tu perfil no existe. Vuelve a iniciar sesión.');
+    const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
+    const check = canRegister(stats, 'pausa', now);
+    if (!check.ok) throw new HttpsError('failed-precondition', check.message!, { reason: check.reason });
+    const { stats: reserved, stampNumber } = reserveStamp(stats, 'pausa', now);
+    const c = await creditInTx(tx, { uid, user, stats: reserved, activity: 'pausa', at: now });
+    tx.set(userRef.collection('activities').doc(), {
+      activity: 'pausa', qrId: null, location: 'Pausa activa guiada', day: dayKey(now), stampNumber,
+      createdAt: Timestamp.fromDate(now), status: 'approved', points: c.points, bonus: c.bonus, seconds: Math.round(seconds),
+    });
+    return {
+      activity: 'pausa', activityName: ACTIVITIES.pausa.name, location: 'Pausa activa guiada', status: 'approved' as const,
+      points: c.points, pendingPoints: 0, bonus: c.bonus, completedChallenges: c.completedChallenges, achievements: c.achievements,
+      totalPoints: c.stats.totalPoints, streak: c.stats.streak, stampNumber, stampedAt: now.getTime(),
+    };
+  });
+});
+
+/* =====================================================================
+ * 6. Pasos (podómetro del iPhone / Health Connect en Android)
+ * ===================================================================== */
+async function stepGoal(): Promise<number> {
+  const g = (await db.doc('config/steps').get()).get('dailyGoal');
+  return typeof g === 'number' && g > 0 ? g : STEP_GOAL_DEFAULT;
+}
+
+/**
+ * El teléfono envía los pasos de hoy (y de ayer, para no perder un día que terminó
+ * con la app cerrada). Solo se guarda el valor más alto del día. Al llegar a la meta
+ * se emite el sello "Meta de pasos" (+10) una vez por día y avanza el reto de pasos.
+ */
+export const syncSteps = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const days = Array.isArray(req.data?.days) ? (req.data.days as { day: string; steps: number }[]).slice(0, 2) : [];
+  const source = String(req.data?.source ?? 'desconocido').slice(0, 30);
+  const today = dayKey(new Date());
+  const allowed = new Set([today, addDays(today, -1)]);
+  const goal = await stepGoal();
+  const results: { day: string; steps: number; goal: number; goalReachedNow: boolean; points: number }[] = [];
+
+  for (const { day, steps } of days) {
+    if (!allowed.has(day)) continue;
+    const n = Math.min(STEPS_MAX_PER_DAY, Math.max(0, Math.floor(Number(steps) || 0)));
+    const r = await db.runTransaction(async (tx) => {
+      const ref = db.doc(`steps/${uid}_${day}`);
+      const userRef = db.doc(`users/${uid}`);
+      const [snap, userSnap] = await Promise.all([tx.get(ref), tx.get(userRef)]);
+      const user = userSnap.data();
+      if (!user) throw new HttpsError('not-found', 'Tu perfil no existe. Vuelve a iniciar sesión.');
+      const best = Math.max(n, (snap.get('steps') as number | undefined) ?? 0);
+      const reached = snap.get('goalReached') === true;
+      if (best >= goal && !reached) {
+        const at = day === today ? new Date() : endOfLocalDay(day);
+        const stats: UserStats = { ...emptyStats(), ...(user.stats ?? {}) };
+        stats.stampsIssued = Math.max(stats.stampsIssued, stats.totalActivities) + 1;
+        const stampNumber = stats.stampsIssued;
+        const c = await creditInTx(tx, { uid, user, stats, activity: 'pasos', at });
+        tx.set(userRef.collection('activities').doc(), {
+          activity: 'pasos', qrId: null, location: `${best.toLocaleString('es-EC')} pasos`, day, stampNumber,
+          createdAt: Timestamp.fromDate(at), status: 'approved', points: c.points, bonus: c.bonus,
+        });
+        tx.set(ref, { uid, day, steps: best, goal, goalReached: true, source, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { day, steps: best, goal, goalReachedNow: true, points: c.points + c.bonus };
+      }
+      tx.set(ref, { uid, day, steps: best, goal, goalReached: reached, source, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { day, steps: best, goal, goalReachedNow: false, points: 0 };
+    });
+    results.push(r);
+  }
+  return { goal, results };
+});
+
+/* =====================================================================
+ * 7. Notificaciones push: dispositivos
+ * ===================================================================== */
+export const registerDevice = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const token = String(req.data?.token ?? '');
+  if (!/^ExponentPushToken\[[A-Za-z0-9_-]+\]$/.test(token)) throw new HttpsError('invalid-argument', 'Token de notificaciones no válido.');
+  const id = createHash('sha256').update(token).digest('hex').slice(0, 32);
+  // Un token pertenece a un solo usuario: si el teléfono cambió de cuenta, se mueve.
+  const old = await db.collectionGroup('devices').where('token', '==', token).get();
+  await Promise.all(old.docs.filter((d) => d.ref.parent.parent?.id !== uid).map((d) => d.ref.delete()));
+  await db.doc(`users/${uid}/devices/${id}`).set({ token, platform: String(req.data?.platform ?? ''), updatedAt: FieldValue.serverTimestamp() });
+  return { ok: true };
+});
+
+export const unregisterDevice = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const token = String(req.data?.token ?? '');
+  const id = createHash('sha256').update(token).digest('hex').slice(0, 32);
+  await db.doc(`users/${uid}/devices/${id}`).delete();
+  return { ok: true };
+});
+
+/* =====================================================================
+ * 8. Agenda: carreras, campeonatos y demás eventos del Comité
+ * ===================================================================== */
+const EVENT_TYPES = ['carrera', 'campeonato', 'caminata', 'charla', 'otro'] as const;
+const fmtEvent = (d: Date) =>
+  d.toLocaleString('es-EC', { timeZone: 'America/Guayaquil', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+
+function parseEvent(data: Record<string, unknown>) {
+  const title = String(data.title ?? '').trim().slice(0, 80);
+  const type = EVENT_TYPES.includes(data.type as never) ? (data.type as string) : 'otro';
+  const location = String(data.location ?? '').trim().slice(0, 120);
+  const description = String(data.description ?? '').trim().slice(0, 600);
+  const startsAt = Number(data.startsAt);
+  const audience = data.audience === 'attendees' ? 'attendees' : 'all';
+  if (!title || !location || !Number.isFinite(startsAt)) throw new HttpsError('invalid-argument', 'Completa título, fecha, hora y lugar.');
+  if (startsAt < Date.now()) throw new HttpsError('invalid-argument', 'La fecha y hora deben ser futuras.');
+  return { title, type, location, description, startsAt: Timestamp.fromMillis(startsAt), audience };
+}
+
+export const saveEvent = onCall(async (req) => {
+  const uid = requireAdmin(req);
+  const ev = parseEvent(req.data ?? {});
+  const id = typeof req.data?.id === 'string' && req.data.id ? req.data.id : null;
+  const when = fmtEvent(ev.startsAt.toDate());
+  if (!id) {
+    const ref = await db.collection('events').add({ ...ev, active: true, attendees: 0, sent: {}, createdBy: uid, createdAt: FieldValue.serverTimestamp() });
+    const notified = await sendPush('all', { title: `Nueva actividad: ${ev.title}`, body: `${when} · ${ev.location}. Inscríbete en la app.`, url: '/retos' }, `nuevo:${ref.id}`);
+    return { id: ref.id, notified };
+  }
+  const ref = db.doc(`events/${id}`);
+  const prev = (await ref.get()).data();
+  if (!prev) throw new HttpsError('not-found', 'El evento no existe.');
+  const moved = prev.startsAt.toMillis() !== ev.startsAt.toMillis();
+  await ref.update({ ...ev, ...(moved ? { sent: {} } : {}), updatedAt: FieldValue.serverTimestamp() });
+  let notified = 0;
+  if (moved || prev.location !== ev.location) {
+    notified = await sendPush(await eventRecipients(id, ev.audience), { title: `Cambio en ${ev.title}`, body: `Nueva fecha y lugar: ${when} · ${ev.location}.`, url: '/retos' }, `cambio:${id}`);
+  }
+  return { id, notified };
+});
+
+export const cancelEvent = onCall(async (req) => {
+  requireAdmin(req);
+  const id = String(req.data?.id ?? '');
+  const ref = db.doc(`events/${id}`);
+  const ev = (await ref.get()).data();
+  if (!ev) throw new HttpsError('not-found', 'El evento no existe.');
+  await ref.update({ active: false, cancelledAt: FieldValue.serverTimestamp() });
+  const notified = await sendPush(await eventRecipients(id, ev.audience), { title: `Cancelado: ${ev.title}`, body: `La actividad del ${fmtEvent(ev.startsAt.toDate())} se canceló.`, url: '/retos' }, `cancelado:${id}`);
+  return { notified };
+});
+
+export const setAttendance = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const id = String(req.data?.eventId ?? '');
+  const going = req.data?.going === true;
+  return db.runTransaction(async (tx) => {
+    const evRef = db.doc(`events/${id}`);
+    const aRef = evRef.collection('attendees').doc(uid);
+    const [ev, a, user] = await Promise.all([tx.get(evRef), tx.get(aRef), tx.get(db.doc(`users/${uid}`))]);
+    if (!ev.exists || ev.get('active') === false) throw new HttpsError('not-found', 'Esta actividad ya no está disponible.');
+    if (going && !a.exists) {
+      tx.set(aRef, { uid, name: user.get('name') ?? '', dept: user.get('dept') ?? '', at: FieldValue.serverTimestamp() });
+      tx.update(evRef, { attendees: FieldValue.increment(1) });
+    } else if (!going && a.exists) {
+      tx.delete(aRef);
+      tx.update(evRef, { attendees: FieldValue.increment(-1) });
+    }
+    return { going };
+  });
+});
+
+async function eventRecipients(eventId: string, audience: string): Promise<string[] | 'all'> {
+  if (audience === 'all') return 'all';
+  const snap = await db.collection(`events/${eventId}/attendees`).get();
+  return snap.docs.map((d) => d.id);
+}
+
+/** Envía los recordatorios que correspondan (24 h antes y el mismo día). */
+export async function runEventReminders(now = new Date()) {
+  const snap = await db.collection('events')
+    .where('active', '==', true)
+    .where('startsAt', '>', Timestamp.fromDate(now))
+    .where('startsAt', '<=', Timestamp.fromMillis(now.getTime() + 25 * 3600_000))
+    .get();
+  let total = 0;
+  for (const d of snap.docs) {
+    const ev = d.data();
+    const startsAt = (ev.startsAt as Timestamp).toDate();
+    const due = dueReminders(startsAt, now, ev.sent ?? {});
+    for (const kind of due) {
+      const time = startsAt.toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil', hour: '2-digit', minute: '2-digit' });
+      const msg = kind === 'd1'
+        ? { title: `Mañana: ${ev.title}`, body: `${fmtEvent(startsAt)} · ${ev.location}. ¡Prepárate!` }
+        : { title: `Hoy: ${ev.title}`, body: `A las ${time} en ${ev.location}. Lleva agua y llega 15 min antes.` };
+      total += await sendPush(await eventRecipients(d.id, ev.audience), { ...msg, url: '/retos' }, `${kind}:${d.id}`);
+      await d.ref.update({ [`sent.${kind}`]: true });
+    }
+  }
+  return total;
+}
+
+export const eventReminders = onSchedule({ schedule: 'every 15 minutes', timeZone: 'America/Guayaquil' }, async () => {
+  await runEventReminders();
+});
+
+/** Solo para el emulador: ejecuta los recordatorios con una hora simulada. */
+export const debugRunReminders = onCall(async (req) => {
+  if (!IS_EMULATOR) throw new HttpsError('permission-denied', 'Solo disponible en el emulador.');
+  requireAdmin(req);
+  return { sent: await runEventReminders(new Date(Number(req.data?.now) || Date.now())) };
 });
 
 function slug(s: string) {

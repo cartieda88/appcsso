@@ -2,10 +2,11 @@ import { Link } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
 import { BrandHeader } from '@/components/brand';
+import { PauseCard, StepsCard } from '@/components/health-cards';
 import { Icon } from '@/components/icon';
 import { ActivityDot, Button, Card, Chip, Empty, Loading, Row, Screen, T } from '@/components/ui';
 import { useRecentActivities } from '@/lib/data';
-import { ACTIVITIES, ACTIVITY_IDS, dayKey, initials, levelFor, relativeDay } from '@/lib/program';
+import { ACTIVITIES, dayKey, QR_ACTIVITY_IDS, initials, levelFor, relativeDay } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
@@ -68,7 +69,7 @@ export default function Inicio() {
         <Chip label={todayTotal ? `${todayTotal} registro${todayTotal > 1 ? 's' : ''}` : 'Sin registros aún'} tone={todayTotal ? 'ok' : 'warn'} />
       </Row>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {ACTIVITY_IDS.map((a) => (
+        {QR_ACTIVITY_IDS.map((a) => (
           <Link key={a} href="/registrar" asChild>
             <Pressable style={{ flexBasis: '47%', flexGrow: 1 }}>
               <Card style={{ gap: 8 }}>
@@ -80,6 +81,9 @@ export default function Inicio() {
           </Link>
         ))}
       </View>
+
+      <StepsCard />
+      <PauseCard />
 
       <Card>
         <T v="h3">Mi historial</T>

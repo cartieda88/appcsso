@@ -45,6 +45,17 @@ export interface AdminStats {
 }
 export const reviewActivity = call<{ approvalId: string; approve: boolean; note?: string }, { status: 'approved' | 'rejected'; points?: number; bonus?: number }>('reviewActivity');
 
+export const registerPause = call<{ seconds: number }, RegisterResult>('registerPause');
+export interface StepsResult { goal: number; results: { day: string; steps: number; goal: number; goalReachedNow: boolean; points: number }[] }
+export const syncSteps = call<{ days: { day: string; steps: number }[]; source: string }, StepsResult>('syncSteps');
+export const registerDevice = call<{ token: string; platform: string }, { ok: boolean }>('registerDevice');
+export const unregisterDevice = call<{ token: string }, { ok: boolean }>('unregisterDevice');
+export type EventType = 'carrera' | 'campeonato' | 'caminata' | 'charla' | 'otro';
+export interface EventInput { id?: string; title: string; type: EventType; location: string; description: string; startsAt: number; audience: 'all' | 'attendees' }
+export const saveEvent = call<EventInput, { id: string; notified: number }>('saveEvent');
+export const cancelEvent = call<{ id: string }, { notified: number }>('cancelEvent');
+export const setAttendance = call<{ eventId: string; going: boolean }, { going: boolean }>('setAttendance');
+
 export const adminStats = call<{ month?: string }, AdminStats>('adminStats');
 
 /** Mensaje legible para mostrar al colaborador. */

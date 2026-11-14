@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
 
 import { NetlifeLogo } from '@/components/brand';
@@ -17,6 +17,12 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
+  const [wait, setWait] = useState(0);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const id = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(id);
+  }, [wait]);
 
   const input = {
     fontFamily: font.semibold, fontSize: 17, color: t.ink, backgroundColor: t.surface, borderColor: t.line, borderWidth: 1.5,
@@ -30,6 +36,7 @@ export default function Login() {
     try {
       const { data } = await requestLoginCode({ email: e });
       setStep('code');
+      setWait(60);
       setMsg({ text: data.devCode ? `Emulador: tu código es ${data.devCode}` : `Te enviamos un código de 6 dígitos a ${e}. Revisa también la bandeja de correo no deseado.` });
     } catch (err) {
       setMsg({ text: errorMessage(err), error: true });
@@ -73,7 +80,14 @@ export default function Login() {
                 style={[input, { fontFamily: font.extrabold, fontSize: 28, letterSpacing: 10, textAlign: 'center' }]}
               />
               <Button title="Ingresar" onPress={verify} loading={busy} disabled={code.length !== 6} />
+              <Button title={wait > 0 ? `Reenviar código en ${wait} s` : 'Reenviar código'} variant="ghost" disabled={wait > 0 || busy} onPress={sendCode} />
               <Button title="Usar otro correo" variant="ghost" onPress={() => { setStep('email'); setCode(''); setMsg(null); }} />
+              <Card style={{ backgroundColor: t.surface2, borderColor: 'transparent', gap: 6 }}>
+                <T style={{ fontFamily: font.bold }}>¿No te llega el código?</T>
+                <T v="small">Muévete no usa contraseña: cada vez que ingresas recibes un código nuevo en tu correo institucional, así que no hay nada que recuperar.</T>
+                <T v="small">Revisa la bandeja de correo no deseado y espera un minuto antes de pedir otro. El código vence a los 10 minutos.</T>
+                <T v="small">Si cambiaste de correo o no puedes ingresar, escribe a Talento Humano para que actualicen tus datos.</T>
+              </Card>
             </View>
           )}
 

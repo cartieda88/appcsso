@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 
-import { Button, Card, Chip, Empty, Loading, Progress, Row, Screen, T } from '@/components/ui';
+import { Agenda } from '@/components/agenda';
+import { Button, Card, Chip, Empty, Loading, Progress, Row, Screen, Segmented, T } from '@/components/ui';
 import { errorMessage, joinChallenge } from '@/lib/api';
 import { useCampaign, useChallenges } from '@/lib/data';
 import { dayKey } from '@/lib/program';
@@ -9,7 +10,18 @@ import { font, useTheme } from '@/lib/theme';
 
 const fmt = (day: string) => new Date(day + 'T12:00:00').toLocaleDateString('es-EC', { day: 'numeric', month: 'short' });
 
-export default function Retos() {
+export default function RetosTab() {
+  const [view, setView] = useState<'retos' | 'agenda'>('retos');
+  return (
+    <Screen>
+      <T v="h2">{view === 'retos' ? 'Retos y campañas' : 'Agenda del Comité'}</T>
+      <Segmented<'retos' | 'agenda'> options={[['retos', 'Retos'], ['agenda', 'Agenda']]} value={view} onChange={setView} />
+      {view === 'retos' ? <Retos /> : <Agenda />}
+    </Screen>
+  );
+}
+
+function Retos() {
   const t = useTheme();
   const { challenges, joined, error } = useChallenges();
   const campaign = useCampaign();
@@ -25,8 +37,7 @@ export default function Retos() {
 
   const today = dayKey();
   return (
-    <Screen>
-      <T v="h2">Retos y campañas</T>
+    <>
       {campaign ? (
         <Card style={{ backgroundColor: t.brand, borderColor: 'transparent' }}>
           <T v="label" color={t.brandInk}>Campaña del mes</T>
@@ -69,6 +80,6 @@ export default function Retos() {
           </Card>
         );
       })}
-    </Screen>
+    </>
   );
 }

@@ -7,7 +7,7 @@ import { Icon } from '@/components/icon';
 import { Stamp } from '@/components/stamp';
 import { ActivityDot, Button, Card, Chip, Loading, Row, Screen, T } from '@/components/ui';
 import { errorMessage, registerActivity, type RegisterResult } from '@/lib/api';
-import { ACTIVITIES, ACTIVITY_IDS } from '@/lib/program';
+import { ACTIVITIES, QR_ACTIVITY_IDS } from '@/lib/program';
 import { radius, useTheme } from '@/lib/theme';
 
 type State = { kind: 'scanning' } | { kind: 'sending' } | { kind: 'done'; result: RegisterResult } | { kind: 'error'; message: string };
@@ -95,7 +95,7 @@ export default function Registrar() {
 
       <Card>
         <T v="label">Puntos por actividad</T>
-        {ACTIVITY_IDS.map((a) => (
+        {QR_ACTIVITY_IDS.map((a) => (
           <Row key={a}>
             <ActivityDot activity={a} size={34} />
             <View style={{ flex: 1 }}>

@@ -21,6 +21,13 @@ const PATHS: Record<string, string[]> = {
   sun: ['M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'],
   close: ['M6 6l12 12M18 6L6 18'],
   passport: ['M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6zM9 17h7'],
+  pausa: ['M12 8v6M12 10l-5-3M12 10l5-3M12 14l-3 7M12 14l3 7'],
+  pasos: ['M8 3c1.8 0 2.6 2 2.6 4.2S9.6 11 8 11 5.6 9.4 5.6 7.2 6.2 3 8 3zM6 13.5h4.2v1.6a2.1 2.1 0 0 1-4.2 0zM16 8c1.8 0 2.4 2 2.4 4.2S17.6 16 16 16s-2.6-1.6-2.6-3.8S14.2 8 16 8zM13.8 18.5H18v1.4a2.1 2.1 0 0 1-4.2 0z'],
+  bell: ['M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0'],
+  calendar: ['M4 6h16v14H4zM4 10h16M8 3v4M16 3v4'],
+  pin: ['M12 21s-6-5.6-6-11a6 6 0 0 1 12 0c0 5.4-6 11-6 11z'],
+  play: ['M8 5l11 7-11 7z'],
+  plus: ['M12 5v14M5 12h14'],
 };
 const CIRCLES: Record<string, [number, number, number][]> = {
   piscina: [[16, 6, 2]],
@@ -29,6 +36,8 @@ const CIRCLES: Record<string, [number, number, number][]> = {
   users: [[9, 8, 3.5]],
   sun: [[12, 12, 4]],
   passport: [[12.5, 10.5, 3.2]],
+  pausa: [[12, 5, 2]],
+  pin: [[12, 10, 2.2]],
 };
 
 export type IconName = keyof typeof PATHS;

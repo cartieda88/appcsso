@@ -143,6 +143,68 @@ async function login(c, email) {
   assert.equal(ops.participants, 1); assert.equal(ops.points, 110);
   ok('participación por departamento correcta');
 
+  console.log('Pausas activas y pasos');
+  await fails(a.call('registerPause', { seconds: 30 }), /Completa la rutina/);
+  ok('la pausa exige completar la rutina guiada (2 min)');
+  const pz = await a.call('registerPause', { seconds: 150 });
+  assert.equal(pz.points, 5); assert.equal(pz.activity, 'pausa');
+  await fails(a.call('registerPause', { seconds: 150 }), /Espera \d+ min/);
+  ok('pausa activa +5 y exige 60 min hasta la siguiente');
+  const { addDays: plusDays, dayKey: dk } = require('../lib/src/rules');
+  const today = dk(new Date()); const ayer = plusDays(today, -1);
+  let st = await a.call('syncSteps', { days: [{ day: ayer, steps: 9100 }, { day: today, steps: 4200 }, { day: '2020-01-01', steps: 99999 }], source: 'prueba' });
+  assert.equal(st.goal, 8000);
+  assert.deepEqual(st.results.map((r) => [r.day, r.steps, r.goalReachedNow]), [[ayer, 9100, true], [today, 4200, false]]);
+  ok('pasos: ayer llegó a 9.100 (sello Meta de pasos), hoy 4.200; ignora días fuera de rango');
+  st = await a.call('syncSteps', { days: [{ day: today, steps: 3000 }] });
+  assert.equal(st.results[0].steps, 4200);
+  st = await a.call('syncSteps', { days: [{ day: today, steps: 8350 }] });
+  assert.equal(st.results[0].goalReachedNow, true); assert.equal(st.results[0].points, 10);
+  st = await a.call('syncSteps', { days: [{ day: today, steps: 12000 }] });
+  assert.equal(st.results[0].goalReachedNow, false);
+  ok('pasos: guarda el máximo del día y da la meta (+10) una sola vez');
+  const pasos = await getDocs(query(collection(a.db, 'users', uid, 'activities'), where('activity', '==', 'pasos')));
+  assert.equal(pasos.size, 2);
+  const mySteps = await getDoc(doc(a.db, 'steps', `${uid}_${today}`));
+  assert.equal(mySteps.get('steps'), 12000);
+  await fails(getDoc(doc(b.db, 'steps', `${uid}_${today}`)), /permission|PERMISSION/i);
+  ok('los pasos de una persona no los ven los demás');
+
+  console.log('Notificaciones y agenda');
+  await a.call('registerDevice', { token: 'ExponentPushToken[telefonoMaria]', platform: 'android' });
+  await b.call('registerDevice', { token: 'ExponentPushToken[telefonoCarlos]', platform: 'ios' });
+  await fails(a.call('registerDevice', { token: 'cualquier-cosa' }), /no válido/);
+  ok('registra los teléfonos para notificaciones push');
+  const y = Number(today.slice(0, 4)), mo = Number(today.slice(5, 7)), dd = Number(today.slice(8, 10));
+  const startsAt = Date.UTC(y, mo - 1, dd + 3, 13); // en 3 días, 08:00 en Ecuador
+  await fails(b.call('saveEvent', { title: 'X', location: 'Y', startsAt }), /Talento Humano/);
+  ok('solo Talento Humano / Comité crea eventos');
+  const ev = await c.call('saveEvent', { title: 'Carrera 5K Netlife', type: 'carrera', location: 'Parque La Carolina', description: 'Recorrido de 5 km.', startsAt, audience: 'attendees' });
+  const logs = async (tag) => (await adb.collection('pushLog').where('tag', '==', tag).get()).docs.map((d) => d.data());
+  const nuevo = await logs(`nuevo:${ev.id}`);
+  assert.equal(nuevo.length, 1); assert.equal(nuevo[0].tokens, 2); assert.match(nuevo[0].title, /Nueva actividad: Carrera 5K/);
+  ok(`al publicar la carrera se notifica a todos: "${nuevo[0].title}" (${nuevo[0].tokens} teléfonos)`);
+  await a.call('setAttendance', { eventId: ev.id, going: true });
+  assert.equal((await getDoc(doc(a.db, 'events', ev.id))).get('attendees'), 1);
+  ok('María se inscribe (1 inscrito)');
+  await c.call('debugRunReminders', { now: startsAt - 30 * 3600_000 });
+  assert.equal((await logs(`d1:${ev.id}`)).length, 0);
+  await c.call('debugRunReminders', { now: startsAt - 23 * 3600_000 });
+  const d1 = await logs(`d1:${ev.id}`);
+  assert.equal(d1.length, 1); assert.deepEqual(d1[0].recipients, [uid]); assert.match(d1[0].title, /^Mañana: Carrera 5K/);
+  ok(`24 h antes, solo a inscritos: "${d1[0].title}" — ${d1[0].body}`);
+  await c.call('debugRunReminders', { now: startsAt - 22 * 3600_000 });
+  assert.equal((await logs(`d1:${ev.id}`)).length, 1);
+  ok('no repite el recordatorio');
+  await c.call('debugRunReminders', { now: startsAt - 1 * 3600_000 });
+  const d0 = await logs(`d0:${ev.id}`);
+  assert.equal(d0.length, 1); assert.match(d0[0].title, /^Hoy: Carrera 5K/);
+  ok(`el mismo día: "${d0[0].title}" — ${d0[0].body}`);
+  await c.call('saveEvent', { id: ev.id, title: 'Carrera 5K Netlife', type: 'carrera', location: 'Parque Samanes', startsAt: startsAt + 3600_000, audience: 'attendees' });
+  const cambio = await logs(`cambio:${ev.id}`);
+  assert.equal(cambio.length, 1); assert.match(cambio[0].body, /Parque Samanes/);
+  ok('si cambia fecha o lugar, avisa a los inscritos y reprograma los recordatorios');
+
   for (const x of [a, b, c, v]) { await signOut(x.auth); await deleteApp(x.app); }
   console.log('\nTodo OK');
   process.exit(0);

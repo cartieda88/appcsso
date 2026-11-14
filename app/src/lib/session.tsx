@@ -3,6 +3,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { verifyLoginCode } from './api';
+import { unregisterPush } from './notifications';
 import { auth, db } from './firebase';
 import type { UserStats } from './program';
 
@@ -63,7 +64,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const { data } = await verifyLoginCode({ email, code });
       await signInWithCustomToken(auth, data.token);
     },
-    signOut: () => signOut(auth),
+    async signOut() {
+      await unregisterPush();
+      await signOut(auth);
+    },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

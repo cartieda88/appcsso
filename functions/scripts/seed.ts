@@ -19,6 +19,8 @@ const DEPARTMENTS = [
 const CHALLENGES = [
   { id: 'semana-en-movimiento', title: 'Semana en movimiento', description: 'Registra al menos una actividad cada día durante 7 días.', kind: 'days', activity: null, goal: 7, durationDays: 7, bonus: 60 },
   { id: '21-dias-de-gradas', title: '21 días de gradas', description: 'Usa las gradas en 21 registros durante 30 días.', kind: 'count', activity: 'gradas', goal: 21, durationDays: 30, bonus: 150 },
+  { id: '21-dias-de-pasos', title: '21 días de 8.000 pasos', description: 'Llega a la meta diaria de pasos en 21 días distintos durante 30 días. La app cuenta tus pasos con el podómetro del teléfono.', kind: 'days', activity: 'pasos', goal: 21, durationDays: 30, bonus: 200 },
+  { id: 'pausas-activas-20', title: '20 pausas activas', description: 'Completa 20 pausas activas guiadas en 30 días. Activa los recordatorios para no olvidarlas.', kind: 'count', activity: 'pausa', goal: 20, durationDays: 30, bonus: 100 },
   { id: '30-dias-de-bienestar', title: '30 días de bienestar', description: 'Suma 30 actividades válidas en 30 días: combina gimnasio, piscina, fútbol y gradas.', kind: 'count', activity: null, goal: 30, durationDays: 30, bonus: 250 },
 ];
 
@@ -45,6 +47,8 @@ async function main() {
   for (const d of DEPARTMENTS) batch.set(db.doc(`departments/${slug(d.name)}`), d, { merge: true });
   for (const { id, ...c } of CHALLENGES) batch.set(db.doc(`challenges/${id}`), { ...c, active: true }, { merge: true });
   batch.set(db.doc('config/campaign'), CAMPAIGN, { merge: true });
+  // Meta diaria de pasos (sello "Meta de pasos" +10 pts al llegar).
+  batch.set(db.doc('config/steps'), { dailyGoal: 8000 }, { merge: true });
   for (const q of QR_CODES) {
     const ref = db.doc(`qrCodes/${q.id}`);
     const existing = await ref.get();
@@ -52,7 +56,7 @@ async function main() {
     batch.set(ref, { requiresApproval: false, ...q, token, active: true }, { merge: true });
   }
   await batch.commit();
-  console.log(`Listo: ${DEPARTMENTS.length} departamentos, ${CHALLENGES.length} retos, ${QR_CODES.length} códigos QR${rotate ? ' (tokens nuevos)' : ''}.`);
+  console.log(`Listo: ${DEPARTMENTS.length} departamentos, ${CHALLENGES.length} retos, meta de 8.000 pasos, ${QR_CODES.length} códigos QR${rotate ? ' (tokens nuevos)' : ''}.`);
 }
 
 function slug(s: string) {

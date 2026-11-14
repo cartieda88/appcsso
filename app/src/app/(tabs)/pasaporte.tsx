@@ -9,7 +9,7 @@ import { LogrosView } from '@/components/logros-view';
 import { Stamp, StampSlot, stampDate } from '@/components/stamp';
 import { Button, Card, Chip, Loading, Progress, Row, Screen, Segmented, T } from '@/components/ui';
 import { usePassport, type ActivityLog } from '@/lib/data';
-import { ACTIVITIES, ACTIVITY_IDS, dayKey, PAGE_SIZE, PASSPORT_BONUS } from '@/lib/program';
+import { ACTIVITIES, ACTIVITY_IDS, dayKey, PAGE_SIZE, PASSPORT_BONUS, QR_ACTIVITY_IDS } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, radius, useTheme } from '@/lib/theme';
 
@@ -50,7 +50,7 @@ function Sellos() {
   const [shareMsg, setShareMsg] = useState<string | null>(null);
   const approved = rows?.filter((r) => r.status === 'approved') ?? [];
   const pending = rows?.filter((r) => r.status === 'pending').length ?? 0;
-  const monthKinds = new Set(approved.map((r) => r.activity)).size;
+  const monthKinds = new Set(approved.filter((r) => QR_ACTIVITY_IDS.includes(r.activity)).map((r) => r.activity)).size;
   const monthData = profile?.stats.months?.[`${page.y}-${String(page.m).padStart(2, '0')}`];
 
   async function sharePage() {
@@ -72,7 +72,7 @@ function Sellos() {
   }
 
   const stats = profile?.stats;
-  const kinds = stats ? ACTIVITY_IDS.filter((a) => (stats.counts[a] ?? 0) > 0).length : 0;
+  const kinds = stats ? QR_ACTIVITY_IDS.filter((a) => (stats.counts[a] ?? 0) > 0).length : 0;
   const slots = rows ? Math.max(SLOTS_PER_PAGE, Math.ceil(rows.length / 3) * 3) - rows.length : 0;
 
   return (
@@ -90,7 +90,7 @@ function Sellos() {
         <Row style={{ gap: 8 }}>
           {[
             [String(stats?.totalActivities ?? 0), 'sellos'],
-            [`${kinds}/${ACTIVITY_IDS.length}`, 'actividades'],
+            [`${kinds}/${QR_ACTIVITY_IDS.length}`, 'actividades'],
             [String(stats?.activeDays ?? 0), 'días activos'],
           ].map(([v, l]) => (
             <View key={l} style={{ flex: 1, backgroundColor: t.heroTile, borderRadius: 14, padding: 10 }}>
@@ -167,7 +167,7 @@ function Sellos() {
             <T v="h3">Logros del mes</T>
             {[
               { key: 'page', title: 'Página completa', desc: `${PAGE_SIZE} sellos validados en el mes`, value: approved.length, goal: PAGE_SIZE, done: !!monthData?.page },
-              { key: 'full', title: 'Pasaporte completo', desc: 'Un sello de cada actividad en el mes', value: monthKinds, goal: ACTIVITY_IDS.length, done: !!monthData?.full },
+              { key: 'full', title: 'Pasaporte completo', desc: 'Gradas, gimnasio, piscina y fútbol en el mes', value: monthKinds, goal: QR_ACTIVITY_IDS.length, done: !!monthData?.full },
             ].map((g) => (
               <View key={g.key} style={{ gap: 6 }}>
                 <Row style={{ justifyContent: 'space-between' }}>

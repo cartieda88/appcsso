@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "ec.net.netlife.muevete",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMotionUsageDescription": "Muévete cuenta tus pasos para el reto de pasos y para avisarte cuando llegues a tu meta diaria."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +22,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "ec.net.netlife.muevete"
+      "package": "ec.net.netlife.muevete",
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+      ]
     },
     "web": {
       "output": "single",
@@ -43,7 +50,32 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26,
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ],
+      "expo-background-task",
+      [
+        "expo-notifications",
+        {
+          "color": "#F5AD20",
+          "defaultChannel": "eventos"
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Muévete cuenta tus pasos para el reto de pasos y para avisarte cuando llegues a tu meta diaria."
+        }
+      ],
+      "react-native-health-connect"
     ],
     "experiments": {
       "typedRoutes": true,

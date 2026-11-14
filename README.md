@@ -27,6 +27,10 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
   - **Logros del mes:** *Página completa* (9 sellos validados en el mes) y *Pasaporte completo* (un sello de cada actividad en el mes). Cada uno da +50 puntos una vez por mes; los valores están en `functions/src/rules.ts` (`PAGE_SIZE`, `PASSPORT_ACHIEVEMENTS`).
   - **Compartir:** el botón *Compartir esta página* genera una imagen PNG de la página del mes y abre el menú de compartir del teléfono (WhatsApp, Teams, correo). En el navegador la descarga.
 - **Validación por un responsable:** los QR con `requiresApproval: true` (por defecto, el de la cancha de fútbol) dejan el sello *pendiente*, sin puntos. Las personas con rol `validador` en la nómina (la mesa de control) o los `admin` lo aprueban o rechazan desde el botón ✓ de la pantalla de inicio. Al aprobar se suman los puntos, la racha, los retos, el ranking y los logros del pasaporte, con la fecha y hora originales del registro. Al rechazar se puede escribir un motivo y la persona puede volver a registrarse ese día. Nadie puede validar su propio sello. El panel de Talento Humano muestra cuántos sellos esperan validación.
+- **Pausas activas:** rutina guiada de 2 min 30 s (cuello, hombros, muñecas, espalda y piernas) que da un sello y +5 puntos, hasta 4 al día con 1 hora entre ellas. El colaborador activa **recordatorios** en el teléfono (cada 1 h, 1 h 30 o 2 h, en su horario laboral de lunes a viernes). Son notificaciones locales: funcionan sin internet y sin servidor.
+- **Pasos:** la app lee los pasos del día del **podómetro del iPhone** (CoreMotion) o de **Health Connect** en Android (Google Fit, Samsung Health, relojes). Al llegar a la meta diaria (8.000 por defecto, en `config/steps.dailyGoal`) se emite el sello *Meta de pasos* (+10) y llega una **notificación**, también con la app cerrada, gracias a una tarea en segundo plano cada ~30 min. Se envían los pasos de hoy y de ayer, y el servidor guarda el máximo de cada día (tope de 70.000). Esto alimenta el reto "21 días de 8.000 pasos".
+- **Agenda y notificaciones push:** Talento Humano publica carreras, campeonatos, caminatas o charlas (fecha, hora, lugar y descripción) desde *Retos → Agenda*. Al publicar llega un push a todo el personal. Los colaboradores se inscriben con *Me apunto*. Una función programada envía los recordatorios **24 h antes** ("Mañana: …") y **el mismo día** desde las 07:00 ("Hoy: …"), a los inscritos o a todo el personal según se elija. Si cambia la fecha o el lugar, o se anula, se avisa y los recordatorios se reprograman. Los push usan el servicio de Expo, así que no hace falta configurar FCM ni APNs a mano.
+- **Ingreso sin contraseña:** no hay contraseñas que recuperar; cada ingreso usa un código nuevo de 6 dígitos que llega al correo. La pantalla tiene *Reenviar código* (cada 60 s) y ayuda si el código no llega.
 - **Retos:** pueden ser de días distintos con actividad (por ejemplo, 7 días seguidos) o de número de registros (por ejemplo, 21 de gradas). Al cumplirlos se suma el bono.
 
 ### Datos en Firestore
@@ -38,6 +42,9 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 | `scores/{periodo}_{uid}`, `deptScores/…` | Ranking por semana (`W2026-46`) y mes (`M2026-11`) | Todos los colaboradores |
 | `stats/{periodo}` | Totales para el panel | Admin |
 | `approvals/{id}` | Sellos pendientes de validación | Validadores y admin |
+| `steps/{uid}_{día}` | Pasos del día y si llegó a la meta | El propio colaborador y los admin |
+| `events/{id}` (+ `attendees`) | Agenda del Comité e inscritos | Todos (cada uno ve su inscripción) |
+| `users/{uid}/devices/{id}` | Tokens de notificaciones push | Solo el servidor |
 | `qrCodes/{id}` | Actividad, lugar y token secreto de cada QR | Solo el servidor |
 | `challenges/{id}`, `departments/{id}`, `config/campaign` | Configuración del Comité | Todos los colaboradores |
 
@@ -95,7 +102,9 @@ Pruebas unitarias de las reglas: `cd functions && npm test`.
    cd app
    npx eas-cli@latest build --profile piloto --platform android
    ```
-   El perfil `piloto` genera un APK para instalar en el piloto con el Comité. Para las tiendas: `eas build --profile production` y `eas submit`.
+   El perfil `piloto` genera un APK para instalar en el piloto con el Comité.
+   Antes del primer build, ejecuta `npx eas-cli@latest init`, que agrega `extra.eas.projectId` a `app.json`: sin él no hay notificaciones push. Para iOS, EAS pide las credenciales de Apple Push la primera vez.
+   En Android, el colaborador debe tener la app **Health Connect** (viene incluida desde Android 14; en versiones anteriores se instala desde Play Store). Al publicar en Play Store, Google pide justificar el permiso de pasos y la política de privacidad. Para las tiendas: `eas build --profile production` y `eas submit`.
    El panel también funciona en el navegador: `npx expo export -p web` y publicar `dist/` en Firebase Hosting.
 
 ## Pendiente de definir con el Comité / TI

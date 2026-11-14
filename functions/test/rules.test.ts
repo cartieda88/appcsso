@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import {
   addDays, advanceChallenge, applyActivity, canRegister, creditActivity, dayKey, emptyStats, monthKey, normalizeEmail, parseQr,
-  PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
+  dueReminders, endOfLocalDay, PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
   type ChallengeDef,
 } from '../src/rules';
 
@@ -127,4 +127,40 @@ test('aprobación tardía de un día anterior no rompe la racha', () => {
   assert.equal(s.lastActiveDay, '2026-11-11');
   s = creditActivity(s, 'piscina', at('2026-11-11T22:00:00Z'), 15).stats; // mismo día, no suma día activo
   assert.equal(s.activeDays, 3);
+});
+
+test('pausas activas: 4 al día con 60 min entre ellas; no cuentan para pasaporte completo', () => {
+  let s = emptyStats();
+  for (let h = 13; h <= 16; h++) {
+    const t = at(`2026-11-13T${h}:00:00Z`);
+    assert.ok(canRegister(s, 'pausa', t).ok);
+    s = applyActivity(s, 'pausa', t, 5);
+  }
+  assert.equal(canRegister(s, 'pausa', at('2026-11-13T19:00:00Z')).reason, 'daily-limit');
+  let p = emptyStats(); let got: string[] = [];
+  for (const [i, a] of (['pausa', 'pasos', 'gradas', 'gimnasio', 'piscina'] as const).entries()) {
+    const r = creditActivity(p, a, at(`2026-11-0${i + 2}T15:00:00Z`), 5); p = r.stats; got = got.concat(r.achievements);
+  }
+  assert.deepEqual(got, []);
+  assert.deepEqual(creditActivity(p, 'futbol', at('2026-11-09T15:00:00Z'), 20).achievements, ['full']);
+});
+
+test('fin del día local para pasos de ayer', () => {
+  assert.equal(dayKey(endOfLocalDay('2026-11-13')), '2026-11-13');
+  assert.equal(endOfLocalDay('2026-11-13').toISOString(), '2026-11-14T04:59:00.000Z');
+});
+
+test('recordatorios de eventos: 24 h antes y el mismo día', () => {
+  const ev = at('2026-11-15T13:00:00Z'); // domingo 15, 08:00 en Ecuador
+  assert.deepEqual(dueReminders(ev, at('2026-11-14T10:00:00Z'), {}), []); // 27 h antes
+  assert.deepEqual(dueReminders(ev, at('2026-11-14T13:30:00Z'), {}), ['d1']); // 23.5 h antes
+  assert.deepEqual(dueReminders(ev, at('2026-11-14T13:30:00Z'), { d1: true }), []);
+  assert.deepEqual(dueReminders(ev, at('2026-11-15T09:00:00Z'), { d1: true }), []); // 04:00 local, faltan 4 h
+  assert.deepEqual(dueReminders(ev, at('2026-11-15T11:00:00Z'), { d1: true }), ['d0']); // 06:00 local: faltan 2 h (evento temprano)
+  assert.deepEqual(dueReminders(ev, at('2026-11-15T12:00:00Z'), { d1: true }), ['d0']); // 07:00 local
+  assert.deepEqual(dueReminders(ev, at('2026-11-15T13:30:00Z'), {}), []); // ya empezó
+  const tarde = at('2026-11-15T23:00:00Z'); // 18:00 local
+  assert.deepEqual(dueReminders(tarde, at('2026-11-15T15:00:00Z'), {}), ['d0']); // 10:00 local, mismo día
+  assert.deepEqual(dueReminders(tarde, at('2026-11-15T08:00:00Z'), {}), []); // 03:00 local del mismo día: espera a las 07:00
+  assert.deepEqual(dueReminders(tarde, at('2026-11-14T23:30:00Z'), {}), ['d1']); // 18:30 local del día anterior (23,5 h antes)
 });

@@ -121,3 +121,29 @@ export function usePendingApprovals() {
     [],
   );
 }
+
+export interface EventItem {
+  id: string; title: string; type: 'carrera' | 'campeonato' | 'caminata' | 'charla' | 'otro'; location: string; description: string;
+  startsAt: number; attendees: number; audience: 'all' | 'attendees';
+}
+
+/** Próximos eventos activos de la agenda. */
+export function useUpcomingEvents() {
+  const [since] = useState(() => Timestamp.fromMillis(Date.now() - 3 * 3600_000));
+  return useLive<EventItem>(
+    () => query(collection(db, 'events'), where('active', '==', true), where('startsAt', '>=', since), orderBy('startsAt', 'asc'), limit(30)),
+    (id, d) => ({ id, title: d.title, type: d.type, location: d.location, description: d.description ?? '', startsAt: d.startsAt?.toMillis?.() ?? 0, attendees: d.attendees ?? 0, audience: d.audience ?? 'all' }),
+    [],
+  );
+}
+
+/** Si el usuario está inscrito en un evento. */
+export function useAttending(eventId: string) {
+  const { user } = useSession();
+  const [going, setGoing] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    return onSnapshot(doc(db, 'events', eventId, 'attendees', user.uid), (s) => setGoing(s.exists()), () => setGoing(false));
+  }, [eventId, user]);
+  return going;
+}

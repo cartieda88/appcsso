@@ -2,15 +2,20 @@
  * Datos de presentación del programa. Las reglas que valen (puntos, límites)
  * se aplican en el servidor: functions/src/rules.ts. Mantén ambos en sincronía.
  */
-export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol';
+export type ActivityId = 'gradas' | 'gimnasio' | 'piscina' | 'futbol' | 'pausa' | 'pasos';
 
 export const ACTIVITIES: Record<ActivityId, { name: string; points: number; maxPerDay: number; rule: string }> = {
   gradas: { name: 'Gradas', points: 10, maxPerDay: 2, rule: 'Hasta 2 registros al día, con 1 hora entre ellos' },
   gimnasio: { name: 'Gimnasio', points: 15, maxPerDay: 1, rule: 'Una sesión al día' },
   piscina: { name: 'Piscina', points: 15, maxPerDay: 1, rule: 'Una sesión al día' },
-  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, rule: 'Un partido del campeonato al día' },
+  futbol: { name: 'Fútbol', points: 20, maxPerDay: 1, rule: 'Un partido del campeonato al día (lo valida la mesa de control)' },
+  pausa: { name: 'Pausa activa', points: 5, maxPerDay: 4, rule: 'Rutina guiada de 2 min; hasta 4 al día, cada hora' },
+  pasos: { name: 'Meta de pasos', points: 10, maxPerDay: 1, rule: 'Al llegar a la meta diaria de pasos' },
 };
 export const ACTIVITY_IDS = Object.keys(ACTIVITIES) as ActivityId[];
+/** Actividades con QR en un lugar físico (y las que pide "Pasaporte completo"). */
+export const QR_ACTIVITY_IDS: ActivityId[] = ['gradas', 'gimnasio', 'piscina', 'futbol'];
+export const STEP_GOAL_DEFAULT = 8000;
 
 export interface UserStats {
   totalPoints: number;
@@ -55,7 +60,7 @@ export interface Badge { name: string; desc: string; icon: BadgeIcon; earned: bo
 
 export function badgesFor(s: UserStats): Badge[] {
   const c = (a: ActivityId) => s.counts[a] ?? 0;
-  const kinds = ACTIVITY_IDS.filter((a) => c(a) > 0).length;
+  const kinds = QR_ACTIVITY_IDS.filter((a) => c(a) > 0).length;
   const b = (name: string, desc: string, icon: BadgeIcon, value: number, goal: number): Badge =>
     ({ name, desc, icon, earned: value >= goal, progress: Math.min(1, value / goal) });
   return [
@@ -70,6 +75,8 @@ export function badgesFor(s: UserStats): Badge[] {
     b('Reto cumplido', 'Completa un reto', 'flag', s.challengesCompleted, 1),
     b('Página completa', `${PAGE_SIZE} sellos en un mes`, 'passport', s.pagesCompleted ?? 0, 1),
     b('Pasaporte completo', 'Las 4 actividades en un mes', 'star', s.passportsCompleted ?? 0, 1),
+    b('Pausa consciente', '25 pausas activas', 'pausa', c('pausa'), 25),
+    b('Caminante', '10 días con la meta de pasos', 'pasos', c('pasos'), 10),
   ];
 }
 
