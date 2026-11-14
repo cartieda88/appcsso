@@ -4,14 +4,14 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 
 | Parte | Tecnología | Carpeta |
 |---|---|---|
-| App Android / iOS (y web para el panel) | Expo SDK 58, React Native, Expo Router | `app/` |
+| App Android / iOS **y página web** (mismo código) | Expo SDK 58, React Native, Expo Router; web en Firebase Hosting | `app/` |
 | Backend | Firebase: Authentication, Firestore, Cloud Functions (Node 22) | `functions/` |
 | Reglas de seguridad e índices | Firestore | `firestore.rules`, `firestore.indexes.json` |
 
 ## Cómo funciona
 
 - **Ingreso:** el colaborador escribe su correo `@netlife.net.ec` y recibe un código de 6 dígitos por correo. Solo entran los correos cargados en la nómina (`directory`). Los marcados como `admin` ven el panel de Talento Humano.
-- **Registro por QR:** cada acceso tiene un QR impreso con el formato `MUEVETE:<id>:<token>`. La app lo lee con la cámara y el servidor valida el token, aplica los límites del día y suma los puntos. La app nunca escribe puntos directamente.
+- **Registro por QR:** cada acceso tiene un QR impreso con un enlace `https://<sitio>/r/<id>/<token>`, que se abre con la cámara de cualquier teléfono (versión web) y que también lee la app. Se sigue aceptando el formato anterior `MUEVETE:<id>:<token>`. La app lo lee con la cámara y el servidor valida el token, aplica los límites del día y suma los puntos. La app nunca escribe puntos directamente.
 - **Reglas** (`functions/src/rules.ts`):
 
   | Actividad | Puntos | Límite |
@@ -84,6 +84,8 @@ Pruebas unitarias de las reglas: `cd functions && npm test`.
 ## Puesta en producción
 
 **Paso a paso para el piloto (Firebase, Expo y APK):** [docs/COMPILAR-PILOTO.md](docs/COMPILAR-PILOTO.md).
+
+**Versión web (sin instalar la app):** [docs/PUBLICAR-WEB.md](docs/PUBLICAR-WEB.md).
 
 1. **Proyecto Firebase:** créalo en la consola de Firebase con el plan **Blaze**, que Cloud Functions requiere y que tiene una cuota gratuita amplia. Activa Authentication (no hace falta ningún proveedor: el ingreso usa tokens personalizados) y Firestore. Pon el ID en `.firebaserc`.
 2. **Permiso para firmar tokens:** en Google Cloud → IAM, dale a la cuenta de servicio de Cloud Functions (`<número>-compute@developer.gserviceaccount.com`) el rol **Creador de tokens de cuenta de servicio** (*Service Account Token Creator*).

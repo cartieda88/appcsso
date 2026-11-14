@@ -1,4 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
 import Tabs, { type BottomTabBarProps } from 'expo-router/js-tabs';
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -44,6 +47,14 @@ function TabBar({ state, navigateToTab }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  // QR escaneado con la cámara antes de iniciar sesión: al entrar, abrir su registro.
+  useEffect(() => {
+    AsyncStorage.getItem('muevete.pendingQr').then((qr) => {
+      if (!qr) return;
+      AsyncStorage.removeItem('muevete.pendingQr').catch(() => {});
+      router.navigate(`/registrar?qr=${encodeURIComponent(qr)}` as never);
+    }).catch(() => {});
+  }, []);
   return (
     <Tabs tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" />

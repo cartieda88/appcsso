@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router, useIsFocused } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
 
@@ -18,6 +18,9 @@ export default function Registrar() {
   const [permission, requestPermission] = useCameraPermissions();
   const [state, setState] = useState<State>({ kind: 'scanning' });
   const lock = useRef(false);
+  // Llegó desde un enlace de QR (cámara del teléfono / versión web): pedir confirmación y registrar.
+  const { qr } = useLocalSearchParams<{ qr?: string }>();
+  const fromLink = typeof qr === 'string' && qr.length > 0 ? qr : null;
 
   async function onScan({ data }: BarcodeScanningResult) {
     if (lock.current) return;
@@ -30,7 +33,11 @@ export default function Registrar() {
       setState({ kind: 'error', message: errorMessage(e) });
     }
   }
-  const again = () => { lock.current = false; setState({ kind: 'scanning' }); };
+  const again = () => {
+    lock.current = false;
+    setState({ kind: 'scanning' });
+    if (fromLink) router.replace('/registrar');
+  };
 
   if (state.kind === 'done') {
     const r = state.result;
@@ -57,6 +64,24 @@ export default function Registrar() {
         </Card>
         <Button title="Ver mi pasaporte" icon="passport" onPress={() => { again(); router.navigate('/pasaporte'); }} />
         <Button title="Escanear otro código" icon="qr" variant="ghost" onPress={again} />
+      </Screen>
+    );
+  }
+
+  if (fromLink && state.kind !== 'error') {
+    const code = fromLink.startsWith('MUEVETE:') ? fromLink.split(':')[1] : fromLink.split('/r/')[1]?.split('/')[0] ?? '';
+    return (
+      <Screen>
+        <T v="h2">Registrar actividad</T>
+        <Card style={{ alignItems: 'center', gap: 12, paddingVertical: 24 }}>
+          <Icon name="qr" color={t.brandText} size={48} />
+          <T v="h3">Código {code}</T>
+          <T v="small" style={{ textAlign: 'center' }}>Escaneaste el QR de un acceso. Confirma para registrar tu actividad y recibir tu sello.</T>
+          <View style={{ alignSelf: 'stretch', gap: 8 }}>
+            <Button title="Registrar mi actividad" icon="check" loading={state.kind === 'sending'} onPress={() => onScan({ data: fromLink } as BarcodeScanningResult)} />
+            <Button title="Cancelar" variant="ghost" onPress={() => router.replace('/registrar')} />
+          </View>
+        </Card>
       </Screen>
     );
   }

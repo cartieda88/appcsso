@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import {
   addDays, advanceChallenge, applyActivity, canRegister, creditActivity, dayKey, emptyStats, monthKey, normalizeEmail, parseQr,
-  dueReminders, endOfLocalDay, PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
+  dueReminders, endOfLocalDay, isPauseTime, qrUrl, PASSPORT_ACHIEVEMENTS, releaseStamp, reserveStamp, weekKey,
   type ChallengeDef,
 } from '../src/rules';
 
@@ -163,4 +163,21 @@ test('recordatorios de eventos: 24 h antes y el mismo día', () => {
   assert.deepEqual(dueReminders(tarde, at('2026-11-15T15:00:00Z'), {}), ['d0']); // 10:00 local, mismo día
   assert.deepEqual(dueReminders(tarde, at('2026-11-15T08:00:00Z'), {}), []); // 03:00 local del mismo día: espera a las 07:00
   assert.deepEqual(dueReminders(tarde, at('2026-11-14T23:30:00Z'), {}), ['d1']); // 18:30 local del día anterior (23,5 h antes)
+});
+
+test('QR como enlace para abrir con la cámara del teléfono', () => {
+  const url = qrUrl('https://muevete.netlife.net.ec/', 'GR-A0', 'a1B2c3D4e5');
+  assert.equal(url, 'https://muevete.netlife.net.ec/r/GR-A0/a1B2c3D4e5');
+  assert.deepEqual(parseQr(url), { id: 'GR-A0', token: 'a1B2c3D4e5' });
+  assert.equal(parseQr('http://muevete.netlife.net.ec/r/GR-A0/a1B2c3D4e5'), null);
+  assert.equal(parseQr('https://x.com/r/GR-A0/a1B2c3D4e5?y=1'), null);
+});
+
+test('recordatorios de pausa del servidor (web): cada 90 min de 8 a 17, lunes a viernes', () => {
+  const p = { enabled: true, every: 90, start: 8, end: 17, weekdays: [2, 3, 4, 5, 6] };
+  const local = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00-05:00`);
+  const hits = ['08:00', '09:30', '09:44', '10:15', '11:00', '15:30', '17:00'].map((h) => isPauseTime(p, local('2026-11-16', h)));
+  assert.deepEqual(hits, [false, true, true, false, true, true, false]); // lunes; 09:44 cae en la ventana de 09:30
+  assert.equal(isPauseTime(p, local('2026-11-15', '09:30')), false); // domingo
+  assert.equal(isPauseTime({ ...p, enabled: false }, local('2026-11-16', '09:30')), false);
 });

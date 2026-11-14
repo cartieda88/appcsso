@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { registerDevice, unregisterDevice } from './api';
+import { DEFAULT_PAUSE_PREFS, pauseTimes, type PausePrefs } from './pause-schedule';
 
 type Channel = 'eventos' | 'pausas' | 'logros';
 
@@ -61,17 +62,7 @@ export async function notifyLocal(n: { title: string; body: string; url?: string
 
 /* ---------------- Recordatorios de pausas activas ---------------- */
 
-export interface PausePrefs {
-  enabled: boolean;
-  /** Minutos entre recordatorios. */
-  every: 60 | 90 | 120;
-  /** Horario laboral, hora local. */
-  start: number;
-  end: number;
-  /** Días: 1 = domingo … 7 = sábado (formato de expo-notifications). */
-  weekdays: number[];
-}
-export const DEFAULT_PAUSE_PREFS: PausePrefs = { enabled: false, every: 90, start: 8, end: 17, weekdays: [2, 3, 4, 5, 6] };
+export { DEFAULT_PAUSE_PREFS, nextPause, pauseTimes, type PausePrefs } from './pause-schedule';
 const PREFS_KEY = 'muevete.pausas';
 const ID_PREFIX = 'pausa-';
 
@@ -85,13 +76,6 @@ const TIPS = [
 export async function loadPausePrefs(): Promise<PausePrefs> {
   try { return { ...DEFAULT_PAUSE_PREFS, ...JSON.parse((await AsyncStorage.getItem(PREFS_KEY)) ?? '{}') }; }
   catch { return DEFAULT_PAUSE_PREFS; }
-}
-
-/** Horas (h, m) del día en que suena el recordatorio. */
-export function pauseTimes(p: PausePrefs): { h: number; m: number }[] {
-  const out: { h: number; m: number }[] = [];
-  for (let t = p.start * 60 + p.every; t < p.end * 60; t += p.every) out.push({ h: Math.floor(t / 60), m: t % 60 });
-  return out;
 }
 
 /** Guarda las preferencias y reprograma los recordatorios semanales en el teléfono. */
@@ -114,21 +98,6 @@ export async function savePausePrefs(p: PausePrefs): Promise<'ok' | 'denied'> {
   return 'ok';
 }
 
-/** Próximo recordatorio programado, para mostrarlo en la app. */
-export function nextPause(p: PausePrefs, now = new Date()): Date | null {
-  if (!p.enabled) return null;
-  const times = pauseTimes(p);
-  for (let add = 0; add < 8; add++) {
-    const d = new Date(now); d.setDate(d.getDate() + add);
-    if (!p.weekdays.includes(d.getDay() + 1)) continue;
-    for (const { h, m } of times) {
-      const c = new Date(d); c.setHours(h, m, 0, 0);
-      if (c > now) return c;
-    }
-  }
-  return null;
-}
-
 /** Ruta a abrir al tocar una notificación (también si la app estaba cerrada). */
 export function onNotificationOpen(go: (url: string) => void): () => void {
   Notifications.getLastNotificationResponseAsync().then((r) => {
@@ -141,3 +110,7 @@ export function onNotificationOpen(go: (url: string) => void): () => void {
   });
   return () => sub.remove();
 }
+
+/** Solo web: en el teléfono no hace falta (los permisos se piden al registrar). */
+export const webPushStatus = async (): Promise<'granted' | 'prompt' | 'denied' | 'install-first' | 'unsupported'> => 'unsupported';
+export const enableWebPush = async (): Promise<'ok' | 'denied' | 'unsupported'> => 'unsupported';

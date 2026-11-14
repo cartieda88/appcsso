@@ -13,14 +13,18 @@
       "label": "2. Iniciar sesión en Expo",
       "type": "shell",
       "command": "npx eas-cli@latest login",
-      "options": { "cwd": "${workspaceFolder}/app" },
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
       "problemMatcher": []
     },
     {
       "label": "3. Vincular el proyecto con Expo (solo la primera vez)",
       "type": "shell",
       "command": "npx eas-cli@latest init",
-      "options": { "cwd": "${workspaceFolder}/app" },
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
       "problemMatcher": []
     },
     {
@@ -28,15 +32,45 @@
       "detail": "Recomendado. No necesita Android Studio. Da un enlace y un QR para descargar el APK.",
       "type": "shell",
       "command": "npx eas-cli@latest build --profile piloto --platform android",
-      "options": { "cwd": "${workspaceFolder}/app" },
-      "group": { "kind": "build", "isDefault": true },
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Publicar página web (Firebase Hosting)",
+      "detail": "Compila la versión web con los datos de app/.env y la publica en https://ID-DEL-PROYECTO.web.app",
+      "type": "shell",
+      "command": "npx expo export -p web && firebase deploy --only hosting",
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Probar página web en esta computadora",
+      "type": "shell",
+      "command": "npx expo start --web",
+      "options": {
+        "cwd": "${workspaceFolder}/app"
+      },
+      "isBackground": true,
       "problemMatcher": []
     },
     {
       "label": "Generar proyecto Android",
       "type": "shell",
       "command": "npx expo prebuild --platform android --clean",
-      "options": { "cwd": "${workspaceFolder}/app", "env": { "CI": "1" } },
+      "options": {
+        "cwd": "${workspaceFolder}/app",
+        "env": {
+          "CI": "1"
+        }
+      },
       "problemMatcher": []
     },
     {
@@ -45,8 +79,12 @@
       "type": "shell",
       "dependsOn": "Generar proyecto Android",
       "command": "./gradlew assembleRelease",
-      "windows": { "command": ".\\gradlew.bat assembleRelease" },
-      "options": { "cwd": "${workspaceFolder}/app/android" },
+      "windows": {
+        "command": ".\\gradlew.bat assembleRelease"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/app/android"
+      },
       "group": "build",
       "problemMatcher": []
     },

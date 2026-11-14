@@ -205,6 +205,26 @@ async function login(c, email) {
   assert.equal(cambio.length, 1); assert.match(cambio[0].body, /Parque Samanes/);
   ok('si cambia fecha o lugar, avisa a los inscritos y reprograma los recordatorios');
 
+  console.log('Versión web');
+  const tokGr = qr['GR-B1'].split(':')[2];
+  const rUrl = await b.call('registerActivity', { qr: `https://muevete-netlife.web.app/r/GR-B1/${tokGr}` });
+  assert.equal(rUrl.activity, 'gradas'); assert.equal(rUrl.points, 10);
+  ok('el QR como enlace (cámara del teléfono → página web) registra la actividad');
+  await a.call('registerDevice', { token: 'fcm_token_navegador_maria_0123456789abcdef', kind: 'web', platform: 'web' });
+  await fails(a.call('registerDevice', { token: 'x', kind: 'web' }), /no válido/);
+  ok('registra el navegador para Web Push');
+  const pr = await a.call('savePauseReminders', { enabled: true, every: 90, start: 8, end: 17, weekdays: [1, 2, 3, 4, 5, 6, 7] });
+  assert.deepEqual(pr, { enabled: true, every: 90, start: 8, end: 17, weekdays: [1, 2, 3, 4, 5, 6, 7] });
+  const day0 = dk(new Date());
+  const at930 = Date.UTC(+day0.slice(0, 4), +day0.slice(5, 7) - 1, +day0.slice(8, 10), 14, 31); // 09:31 en Ecuador
+  await c.call('debugRunReminders', { now: at930 });
+  const pausaLog = await logs(`pausa:${day0}`);
+  assert.equal(pausaLog.length, 1); assert.deepEqual(pausaLog[0].recipients, [uid]); assert.equal(pausaLog[0].webTokens, 1); assert.equal(pausaLog[0].tokens, 0);
+  ok(`recordatorio de pausa a las 09:30 enviado al navegador: "${pausaLog[0].title}" — ${pausaLog[0].body}`);
+  await c.call('debugRunReminders', { now: at930 + 45 * 60_000 }); // 10:16: no toca
+  assert.equal((await logs(`pausa:${day0}`)).length, 1);
+  ok('a las 10:15 no se envía (siguiente: 11:00)');
+
   for (const x of [a, b, c, v]) { await signOut(x.auth); await deleteApp(x.app); }
   console.log('\nTodo OK');
   process.exit(0);

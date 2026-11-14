@@ -48,7 +48,8 @@ export const reviewActivity = call<{ approvalId: string; approve: boolean; note?
 export const registerPause = call<{ seconds: number }, RegisterResult>('registerPause');
 export interface StepsResult { goal: number; results: { day: string; steps: number; goal: number; goalReachedNow: boolean; points: number }[] }
 export const syncSteps = call<{ days: { day: string; steps: number }[]; source: string }, StepsResult>('syncSteps');
-export const registerDevice = call<{ token: string; platform: string }, { ok: boolean }>('registerDevice');
+export const registerDevice = call<{ token: string; platform: string; kind?: 'expo' | 'web' }, { ok: boolean }>('registerDevice');
+export const savePauseReminders = call<{ enabled: boolean; every: number; start: number; end: number; weekdays: number[] }, unknown>('savePauseReminders');
 export const unregisterDevice = call<{ token: string }, { ok: boolean }>('unregisterDevice');
 export type EventType = 'carrera' | 'campeonato' | 'caminata' | 'charla' | 'otro';
 export interface EventInput { id?: string; title: string; type: EventType; location: string; description: string; startsAt: number; audience: 'all' | 'attendees' }

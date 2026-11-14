@@ -17,6 +17,7 @@ import {
   canRegister,
   creditActivity,
   dueReminders,
+  isPauseTime,
   endOfLocalDay,
   PAUSE_MIN_SECONDS,
   STEP_GOAL_DEFAULT,
@@ -520,12 +521,14 @@ export const syncSteps = onCall(async (req) => {
 export const registerDevice = onCall(async (req) => {
   const uid = requireAuth(req);
   const token = String(req.data?.token ?? '');
-  if (!/^ExponentPushToken\[[A-Za-z0-9_-]+\]$/.test(token)) throw new HttpsError('invalid-argument', 'Token de notificaciones no válido.');
+  const kind = req.data?.kind === 'web' ? 'web' : 'expo';
+  const valid = kind === 'expo' ? /^ExponentPushToken\[[A-Za-z0-9_-]+\]$/.test(token) : /^[A-Za-z0-9_:-]{20,4096}$/.test(token);
+  if (!valid) throw new HttpsError('invalid-argument', 'Token de notificaciones no válido.');
   const id = createHash('sha256').update(token).digest('hex').slice(0, 32);
   // Un token pertenece a un solo usuario: si el teléfono cambió de cuenta, se mueve.
   const old = await db.collectionGroup('devices').where('token', '==', token).get();
   await Promise.all(old.docs.filter((d) => d.ref.parent.parent?.id !== uid).map((d) => d.ref.delete()));
-  await db.doc(`users/${uid}/devices/${id}`).set({ token, platform: String(req.data?.platform ?? ''), updatedAt: FieldValue.serverTimestamp() });
+  await db.doc(`users/${uid}/devices/${id}`).set({ token, kind, platform: String(req.data?.platform ?? ''), updatedAt: FieldValue.serverTimestamp() });
   return { ok: true };
 });
 
@@ -643,11 +646,44 @@ export const eventReminders = onSchedule({ schedule: 'every 15 minutes', timeZon
   await runEventReminders();
 });
 
+/* =====================================================================
+ * 9. Recordatorios de pausas activas para la versión web
+ *    (en la app del teléfono son notificaciones locales; en web los envía el servidor)
+ * ===================================================================== */
+export const savePauseReminders = onCall(async (req) => {
+  const uid = requireAuth(req);
+  const d = req.data ?? {};
+  const every = [60, 90, 120].includes(Number(d.every)) ? Number(d.every) : 90;
+  const start = Math.min(12, Math.max(5, Math.floor(Number(d.start) || 8)));
+  const end = Math.min(22, Math.max(start + 2, Math.floor(Number(d.end) || 17)));
+  const weekdays = Array.isArray(d.weekdays) ? (d.weekdays as unknown[]).map(Number).filter((n) => n >= 1 && n <= 7) : [2, 3, 4, 5, 6];
+  const prefs = { enabled: d.enabled === true, every, start, end, weekdays };
+  await db.doc(`users/${uid}`).update({ pauseReminders: prefs });
+  return prefs;
+});
+
+export async function runPauseReminders(now = new Date()) {
+  const snap = await db.collection('users').where('pauseReminders.enabled', '==', true).get();
+  const due = snap.docs.filter((d) => isPauseTime(d.get('pauseReminders'), now)).map((d) => d.id);
+  if (!due.length) return 0;
+  const tips = [
+    'Levántate, estira el cuello y los hombros. Te toma 2 minutos.',
+    'Mueve muñecas y dedos, y mira lejos de la pantalla.',
+    'Tu espalda te lo agradecerá: haz la rutina guiada de 2 minutos.',
+  ];
+  return sendPush(due, { title: 'Pausa activa', body: tips[now.getHours() % tips.length], url: '/pausa', channelId: 'pausas' }, `pausa:${dayKey(now)}`, 'web');
+}
+
+export const pauseReminders = onSchedule({ schedule: 'every 15 minutes', timeZone: 'America/Guayaquil' }, async () => {
+  await runPauseReminders();
+});
+
 /** Solo para el emulador: ejecuta los recordatorios con una hora simulada. */
 export const debugRunReminders = onCall(async (req) => {
   if (!IS_EMULATOR) throw new HttpsError('permission-denied', 'Solo disponible en el emulador.');
   requireAdmin(req);
-  return { sent: await runEventReminders(new Date(Number(req.data?.now) || Date.now())) };
+  const now = new Date(Number(req.data?.now) || Date.now());
+  return { sent: await runEventReminders(now), pauses: await runPauseReminders(now) };
 });
 
 function slug(s: string) {

@@ -287,10 +287,37 @@ export function advanceChallenge(
   return { ...p, progress, lastDay: day, completed: progress >= def.goal };
 }
 
-/** Interpreta el contenido de un QR del programa. Formato: MUEVETE:<id>:<token> */
+/**
+ * Interpreta el contenido de un QR del programa. Acepta:
+ * - Enlace (nuevo): https://<sitio>/r/<id>/<token>, que se abre con la cámara de cualquier teléfono.
+ * - Texto (anterior): MUEVETE:<id>:<token>
+ */
 export function parseQr(raw: string): { id: string; token: string } | null {
-  const m = /^MUEVETE:([A-Za-z0-9_-]{2,40}):([A-Za-z0-9]{8,64})$/.exec(raw.trim());
+  const s = raw.trim();
+  const m = /^MUEVETE:([A-Za-z0-9_-]{2,40}):([A-Za-z0-9]{8,64})$/.exec(s) ?? /^https:\/\/[^/\s]+\/r\/([A-Za-z0-9_-]{2,40})\/([A-Za-z0-9]{8,64})\/?$/.exec(s);
   return m ? { id: m[1], token: m[2] } : null;
+}
+
+/** Enlace que va dentro del QR impreso. */
+export const qrUrl = (baseUrl: string, id: string, token: string) => `${baseUrl.replace(/\/+$/, '')}/r/${id}/${token}`;
+
+/* ---------- Recordatorios de pausas activas enviados por el servidor (versión web) ---------- */
+export interface PauseReminderPrefs { enabled: boolean; every: number; start: number; end: number; weekdays: number[] }
+
+/**
+ * Si a esta hora local (Ecuador) toca recordatorio de pausa. Los recordatorios caen en
+ * start+every, start+2·every… antes de end; el servidor revisa cada 15 min.
+ * weekdays: 1 = domingo … 7 = sábado.
+ */
+export function isPauseTime(p: PauseReminderPrefs, now: Date): boolean {
+  if (!p.enabled || !(p.every >= 30)) return false;
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const g = (t: string) => parts.find((x) => x.type === t)!.value;
+  const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(g('weekday')) + 1;
+  if (!p.weekdays.includes(weekday)) return false;
+  const minute = Number(g('hour')) * 60 + Math.floor(Number(g('minute')) / 15) * 15;
+  const since = minute - p.start * 60;
+  return since > 0 && minute < p.end * 60 && since % p.every === 0;
 }
 
 export function normalizeEmail(email: unknown): string | null {

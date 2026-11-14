@@ -62,7 +62,7 @@ export function StepsCard() {
       ) : s.kind === 'unavailable' ? (
         <T v="small">{stepsSource.installHint ?? 'Este teléfono no tiene podómetro disponible.'}</T>
       ) : s.kind === 'web' ? (
-        <T v="small">Los pasos se cuentan en la app del teléfono.</T>
+        <T v="small">El navegador no tiene acceso al podómetro del teléfono. Para el reto de pasos usa la app Muévete (Android o iPhone).</T>
       ) : s.kind === 'error' ? (
         <T v="small" color={t.warn}>{s.message}</T>
       ) : <T v="small">Leyendo tus pasos…</T>}

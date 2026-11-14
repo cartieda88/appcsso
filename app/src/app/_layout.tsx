@@ -12,10 +12,12 @@ import '@/lib/background';
 import { enableBackgroundSteps } from '@/lib/background';
 import { configureNotifications, onNotificationOpen, registerForPush } from '@/lib/notifications';
 import { SessionProvider, useSession } from '@/lib/session';
+import { setupWebHead } from '@/lib/web-head';
 import { useTheme } from '@/lib/theme';
 
 SplashScreen.preventAutoHideAsync();
 configureNotifications();
+setupWebHead();
 
 function RootNavigator() {
   const { ready, user, isAdmin, isValidator } = useSession();
@@ -26,6 +28,7 @@ function RootNavigator() {
   useEffect(() => {
     if (!user) return;
     registerForPush().catch(() => {});
+
     enableBackgroundSteps().catch(() => {});
     return onNotificationOpen((url) => router.push(url as never));
   }, [user]);
@@ -47,6 +50,7 @@ function RootNavigator() {
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />
         </Stack.Protected>
+        <Stack.Screen name="r/[id]/[token]" />
       </Stack>
     </>
   );

@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 
 import { BrandHeader } from '@/components/brand';
 import { PauseCard, StepsCard } from '@/components/health-cards';
+import { WebNotifyBanner } from '@/components/web-notify';
 import { Icon } from '@/components/icon';
 import { ActivityDot, Button, Card, Chip, Empty, Loading, Row, Screen, T } from '@/components/ui';
 import { useRecentActivities } from '@/lib/data';
@@ -82,6 +83,7 @@ export default function Inicio() {
         ))}
       </View>
 
+      <WebNotifyBanner />
       <StepsCard />
       <PauseCard />
 
