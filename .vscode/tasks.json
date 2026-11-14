@@ -1,0 +1,81 @@
+{
+  // Tareas de Muévete Netlife. En VS Code: Terminal → Ejecutar tarea… (o Ctrl+Shift+P → "Tasks: Run Task").
+  // Guía completa: docs/COMPILAR-PILOTO.md
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "1. Instalar dependencias",
+      "type": "shell",
+      "command": "npm ci --prefix app && npm ci --prefix functions",
+      "problemMatcher": []
+    },
+    {
+      "label": "2. Iniciar sesión en Expo",
+      "type": "shell",
+      "command": "npx eas-cli@latest login",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "3. Vincular el proyecto con Expo (solo la primera vez)",
+      "type": "shell",
+      "command": "npx eas-cli@latest init",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Compilar APK piloto (nube de Expo)",
+      "detail": "Recomendado. No necesita Android Studio. Da un enlace y un QR para descargar el APK.",
+      "type": "shell",
+      "command": "npx eas-cli@latest build --profile piloto --platform android",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Generar proyecto Android",
+      "type": "shell",
+      "command": "npx expo prebuild --platform android --clean",
+      "options": { "cwd": "${workspaceFolder}/app", "env": { "CI": "1" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Compilar APK local (en esta computadora)",
+      "detail": "Necesita Android Studio (SDK) y app/.env con los datos de Firebase. Resultado: app/android/app/build/outputs/apk/release/app-release.apk",
+      "type": "shell",
+      "dependsOn": "Generar proyecto Android",
+      "command": "./gradlew assembleRelease",
+      "windows": { "command": ".\\gradlew.bat assembleRelease" },
+      "options": { "cwd": "${workspaceFolder}/app/android" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Instalar APK local en el teléfono (USB)",
+      "detail": "Teléfono conectado por USB con depuración USB activada.",
+      "type": "shell",
+      "command": "adb install -r app/android/app/build/outputs/apk/release/app-release.apk",
+      "problemMatcher": []
+    },
+    {
+      "label": "Probar con emuladores de Firebase",
+      "type": "shell",
+      "command": "npm --prefix functions run build && firebase emulators:start --project demo-muevete",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Desplegar backend en Firebase",
+      "type": "shell",
+      "command": "firebase deploy --only functions,firestore",
+      "problemMatcher": []
+    },
+    {
+      "label": "Pruebas de reglas",
+      "type": "shell",
+      "command": "npm --prefix functions test",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}

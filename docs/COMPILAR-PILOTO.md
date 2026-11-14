@@ -26,6 +26,39 @@ git clone https://github.com/cartieda88/appcsso.git
 cd appcsso
 ```
 
+## Desde Visual Studio Code
+
+El proyecto trae **tareas de VS Code** para no escribir comandos. Se usa **Visual Studio Code** (gratis, https://code.visualstudio.com). El Visual Studio "grande" (2022) no sirve para apps de Expo / React Native.
+
+1. Abre VS Code → **Archivo → Abrir carpeta…** → elige la carpeta `appcsso` que descargaste con `git clone`. También puedes hacerlo desde VS Code: **Ctrl+Shift+P → Git: Clonar** y pegar `https://github.com/cartieda88/appcsso.git`.
+2. Acepta instalar las **extensiones recomendadas** (Expo Tools y otras) cuando VS Code lo sugiera.
+3. Ejecuta las tareas desde **Terminal → Ejecutar tarea…**, en este orden:
+
+| Tarea | Cuándo |
+|---|---|
+| 1. Instalar dependencias | La primera vez y cuando cambie `package.json` |
+| 2. Iniciar sesión en Expo | La primera vez (pide tu usuario de expo.dev) |
+| 3. Vincular el proyecto con Expo | Solo la primera vez (luego sube el cambio de `app.json` con la vista de Git de VS Code) |
+| **Compilar APK piloto (nube de Expo)** | Cada versión. También con **Ctrl+Shift+B** |
+
+La tarea muestra el avance en la terminal de VS Code y al final da el **enlace y el QR del APK**. Antes de la primera compilación hay que cargar los datos de Firebase en Expo (paso 4).
+
+### Opción B: compilar en tu propia computadora (sin la nube de Expo)
+
+Sirve si no quieres usar Expo o si la red de la empresa lo bloquea. Necesita más instalación:
+
+1. **Android Studio** (https://developer.android.com/studio). En *SDK Manager* instala **Android SDK Platform 36** y **Android SDK Build-Tools**.
+2. Variables de entorno de Windows (Panel de control → Sistema → Variables de entorno):
+   - `ANDROID_HOME` = `C:\Users\TU_USUARIO\AppData\Local\Android\Sdk`
+   - `JAVA_HOME` = `C:\Program Files\Android\Android Studio\jbr` (el Java 17 que trae Android Studio)
+   - Agrega `%ANDROID_HOME%\platform-tools` al `Path`.
+   - Cierra y vuelve a abrir VS Code.
+3. Copia `app/.env.example` a `app/.env` y llena los 6 datos de Firebase del paso 1.5. La compilación local los toma de ese archivo.
+4. Ejecuta la tarea **Compilar APK local (en esta computadora)**. La primera vez descarga Gradle y las librerías (de 10 a 20 minutos).
+5. El APK queda en `app/android/app/build/outputs/apk/release/app-release.apk`. Compártelo por Teams o WhatsApp, o instálalo con un teléfono conectado por USB con la tarea **Instalar APK local en el teléfono (USB)**.
+
+> El APK local se firma con una clave de desarrollo: sirve para el piloto, pero no para Play Store. Si después cambias a los APK de Expo, cada teléfono tiene que **desinstalar** la versión local antes de instalar la nueva, porque la firma es distinta. Elige un camino y mantenlo durante todo el piloto.
+
 ## 1. Crear el proyecto en Firebase
 
 1. En la consola de Firebase: **Agregar proyecto**, por ejemplo `muevete-netlife`. Anota el **ID del proyecto**.
