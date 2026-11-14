@@ -1,9 +1,10 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { useIsFocused } from 'expo-router';
-import { useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { router, useIsFocused } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
+import { Stamp } from '@/components/stamp';
 import { ActivityDot, Button, Card, Chip, Loading, Row, Screen, T } from '@/components/ui';
 import { errorMessage, registerActivity, type RegisterResult } from '@/lib/api';
 import { ACTIVITIES, ACTIVITY_IDS } from '@/lib/program';
@@ -35,16 +36,20 @@ export default function Registrar() {
     const r = state.result;
     return (
       <Screen>
-        <T v="h2">Registro exitoso</T>
-        <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 28 }}>
-          <ActivityDot activity={r.activity} size={64} />
+        <T v="h2">Registro confirmado</T>
+        <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
+          <StampDrop>
+            <Stamp activity={r.activity} at={r.stampedAt} number={r.stampNumber} size={200} />
+          </StampDrop>
+          <T v="label">Sello N° {r.stampNumber} en tu pasaporte</T>
           <T v="h2">{r.activityName}</T>
           <T v="small">{r.location}</T>
-          <T v="h1" color={t.brandText} style={{ fontSize: 48, lineHeight: 54 }}>+{r.points + r.bonus}</T>
+          <T v="h1" color={t.brandText} style={{ fontSize: 44, lineHeight: 50 }}>+{r.points + r.bonus}</T>
           <T v="small">puntos · total {r.totalPoints} · racha de {r.streak} día{r.streak === 1 ? '' : 's'}</T>
           {r.completedChallenges.map((c) => <Chip key={c} tone="brand" label={`Reto cumplido: ${c} (+bono)`} />)}
         </Card>
-        <Button title="Escanear otro código" icon="qr" onPress={again} />
+        <Button title="Ver mi pasaporte" icon="passport" onPress={() => { again(); router.navigate('/pasaporte'); }} />
+        <Button title="Escanear otro código" icon="qr" variant="ghost" onPress={again} />
       </Screen>
     );
   }
@@ -95,5 +100,21 @@ export default function Registrar() {
         ))}
       </Card>
     </Screen>
+  );
+}
+
+/** Animación de sello: cae desde más grande y se asienta en la página. */
+function StampDrop({ children }: { children: React.ReactNode }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (reduce) { v.setValue(1); return; }
+      Animated.timing(v, { toValue: 1, duration: 420, easing: Easing.out(Easing.back(2.2)), useNativeDriver: true }).start();
+    });
+  }, [v]);
+  return (
+    <Animated.View style={{ opacity: v.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }), transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1.9, 1] }) }] }}>
+      {children}
+    </Animated.View>
   );
 }

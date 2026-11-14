@@ -19,6 +19,8 @@ export interface RegisterResult {
   completedChallenges: string[];
   totalPoints: number;
   streak: number;
+  stampNumber: number;
+  stampedAt: number;
 }
 export const registerActivity = call<{ qr: string }, RegisterResult>('registerActivity');
 

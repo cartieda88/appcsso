@@ -20,6 +20,7 @@ const PATHS: Record<string, string[]> = {
   users: ['M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.8c2 .7 3.2 2.4 3.5 5.2'],
   sun: ['M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4'],
   close: ['M6 6l12 12M18 6L6 18'],
+  passport: ['M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6zM9 17h7'],
 };
 const CIRCLES: Record<string, [number, number, number][]> = {
   piscina: [[16, 6, 2]],
@@ -27,6 +28,7 @@ const CIRCLES: Record<string, [number, number, number][]> = {
   medal: [[12, 15, 5]],
   users: [[9, 8, 3.5]],
   sun: [[12, 12, 4]],
+  passport: [[12.5, 10.5, 3.2]],
 };
 
 export type IconName = keyof typeof PATHS;

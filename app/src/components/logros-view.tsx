@@ -1,15 +1,16 @@
 import { View } from 'react-native';
 
-import { Icon } from '@/components/icon';
-import { Card, Chip, Loading, Progress, Row, Screen, T } from '@/components/ui';
+import { Icon } from './icon';
+import { Card, Chip, Loading, Progress, Row, T } from './ui';
 import { ACTIVITIES, ACTIVITY_IDS, badgesFor, levelFor, LEVELS } from '@/lib/program';
 import { useSession } from '@/lib/session';
 import { font, useTheme } from '@/lib/theme';
 
-export default function Logros() {
+/** Nivel, puntos por actividad e insignias (pestaña Pasaporte → Logros). */
+export function LogrosView() {
   const t = useTheme();
   const { profile } = useSession();
-  if (!profile) return <Screen><Loading /></Screen>;
+  if (!profile) return <Loading />;
   const s = profile.stats;
   const lv = levelFor(s.totalPoints);
   const badges = badgesFor(s);
@@ -17,8 +18,7 @@ export default function Logros() {
   const max = Math.max(1, ...byAct.map((x) => x.pts));
 
   return (
-    <Screen>
-      <T v="h2">Mis puntos y logros</T>
+    <>
       <Card>
         <Row style={{ justifyContent: 'space-between' }}>
           <View>
@@ -61,6 +61,6 @@ export default function Logros() {
           </Card>
         ))}
       </View>
-    </Screen>
+    </>
   );
 }

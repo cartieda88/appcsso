@@ -7,7 +7,7 @@ import { font, useTheme } from '@/lib/theme';
 
 const TABS: Record<string, { label: string; icon: IconName }> = {
   index: { label: 'Inicio', icon: 'home' },
-  logros: { label: 'Logros', icon: 'medal' },
+  pasaporte: { label: 'Pasaporte', icon: 'passport' },
   registrar: { label: 'Registrar', icon: 'qr' },
   ranking: { label: 'Ranking', icon: 'trophy' },
   retos: { label: 'Retos', icon: 'flag' },
@@ -47,7 +47,7 @@ export default function TabsLayout() {
   return (
     <Tabs tabBar={(p) => <TabBar {...p} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" />
-      <Tabs.Screen name="logros" />
+      <Tabs.Screen name="pasaporte" />
       <Tabs.Screen name="registrar" />
       <Tabs.Screen name="ranking" />
       <Tabs.Screen name="retos" />

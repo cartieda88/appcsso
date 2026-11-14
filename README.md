@@ -23,6 +23,7 @@ App de bienestar del Comité de Seguridad y Salud de Netlife. Cada colaborador r
 
   Los días, semanas y meses se calculan en hora de Ecuador (`America/Guayaquil`).
 - **Ranking:** es semanal y mensual. Los departamentos se ordenan por puntos promedio por colaborador (puntos ÷ número de personas del departamento), para que los equipos pequeños compitan en igualdad.
+- **Pasaporte:** cada registro validado deja un sello numerado (N° 0001, 0002…) con la actividad, la fecha y la hora en hora de Ecuador. Los sellos se ven por mes, y al tocar uno se muestra el detalle (lugar y puntos). Al escanear, el sello nuevo aparece con una animación. La pestaña también incluye el nivel y las insignias.
 - **Retos:** pueden ser de días distintos con actividad (por ejemplo, 7 días seguidos) o de número de registros (por ejemplo, 21 de gradas). Al cumplirlos se suma el bono.
 
 ### Datos en Firestore

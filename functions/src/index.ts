@@ -219,6 +219,9 @@ export const registerActivity = onCall(async (req) => {
     nextStats.challengesCompleted += completedNow.length;
 
     // Escrituras
+    // Cada registro válido es un sello del pasaporte, numerado en orden.
+    const stampNumber = nextStats.totalActivities;
+    const stampedAt = Timestamp.fromDate(now);
     tx.set(userRef.collection('activities').doc(), {
       activity,
       qrId: qr.id,
@@ -226,7 +229,8 @@ export const registerActivity = onCall(async (req) => {
       points,
       bonus,
       day,
-      createdAt: FieldValue.serverTimestamp(),
+      stampNumber,
+      createdAt: stampedAt,
     });
     tx.update(userRef, { stats: nextStats });
     challengeUpdates.forEach((u) => tx.update(u.ref, { ...u.data }));
@@ -271,6 +275,8 @@ export const registerActivity = onCall(async (req) => {
       completedChallenges: completedNow,
       totalPoints: nextStats.totalPoints,
       streak: nextStats.streak,
+      stampNumber,
+      stampedAt: stampedAt.toMillis(),
     };
   });
 });

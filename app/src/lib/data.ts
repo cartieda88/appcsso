@@ -1,4 +1,4 @@
-import { collection, doc, limit, onSnapshot, orderBy, query, where, type DocumentData } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, Timestamp, where, type DocumentData } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 
 import { db } from './firebase';
@@ -21,13 +21,18 @@ function useLive<T>(build: () => ReturnType<typeof query> | null, map: (id: stri
   return { rows, error };
 }
 
-export interface ActivityLog { id: string; activity: ActivityId; location: string; points: number; bonus: number; at: number }
+export interface ActivityLog { id: string; activity: ActivityId; location: string; points: number; bonus: number; at: number; stampNumber: number | null }
+
+const toLog = (id: string, d: DocumentData): ActivityLog => ({
+  id, activity: d.activity, location: d.location, points: d.points, bonus: d.bonus ?? 0,
+  at: d.createdAt?.toMillis?.() ?? Date.now(), stampNumber: d.stampNumber ?? null,
+});
 
 export function useRecentActivities(n = 10) {
   const { user } = useSession();
   return useLive<ActivityLog>(
     () => (user ? query(collection(db, 'users', user.uid, 'activities'), orderBy('createdAt', 'desc'), limit(n)) : null),
-    (id, d) => ({ id, activity: d.activity, location: d.location, points: d.points, bonus: d.bonus ?? 0, at: d.createdAt?.toMillis?.() ?? Date.now() }),
+    toLog,
     [user?.uid, n],
   );
 }
@@ -84,4 +89,19 @@ export function useCampaign() {
   const [c, setC] = useState<{ title: string; description: string } | null>(null);
   useEffect(() => onSnapshot(doc(db, 'config', 'campaign'), (s) => setC(s.exists() && s.get('active') !== false ? (s.data() as { title: string; description: string }) : null), () => setC(null)), []);
   return c;
+}
+
+/**
+ * Sellos del pasaporte de un mes (hora de Ecuador, UTC-5 sin horario de verano).
+ * month: 1-12.
+ */
+export function usePassport(year: number, month: number) {
+  const { user } = useSession();
+  const start = Timestamp.fromMillis(Date.UTC(year, month - 1, 1, 5));
+  const end = Timestamp.fromMillis(Date.UTC(year, month, 1, 5));
+  return useLive<ActivityLog>(
+    () => (user ? query(collection(db, 'users', user.uid, 'activities'), where('createdAt', '>=', start), where('createdAt', '<', end), orderBy('createdAt', 'asc')) : null),
+    toLog,
+    [user?.uid, year, month],
+  );
 }

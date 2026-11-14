@@ -66,7 +66,7 @@ async function login(c, email) {
   await fails(a.call('registerActivity', { qr: 'MUEVETE:GR-A0:tokenfalso123' }), /ya no es válido/);
   ok('rechaza QR ajenos o con token incorrecto');
   const r1 = await a.call('registerActivity', { qr: qr['GR-A0'] });
-  assert.equal(r1.points, 10); assert.equal(r1.activity, 'gradas');
+  assert.equal(r1.points, 10); assert.equal(r1.activity, 'gradas'); assert.equal(r1.stampNumber, 1);
   ok(`gradas +${r1.points} (total ${r1.totalPoints}, racha ${r1.streak}, bono reto ${r1.bonus})`);
   await fails(a.call('registerActivity', { qr: qr['GR-B1'] }), /Espera \d+ min/);
   ok('gradas: exige 60 min entre registros');
@@ -82,6 +82,10 @@ async function login(c, email) {
   const ch = (await getDoc(doc(a.db, 'users', uid, 'challenges', 'semana-en-movimiento'))).data();
   assert.equal(ch.progress, 1);
   ok('el reto de días cuenta 1 día aunque haya 4 registros');
+  const stamps = await getDocs(query(collection(a.db, 'users', uid, 'activities'), orderBy('createdAt', 'asc')));
+  assert.deepEqual(stamps.docs.map((d) => d.get('stampNumber')), [1, 2, 3, 4]);
+  assert.deepEqual(stamps.docs.map((d) => d.get('activity')), ['gradas', 'gimnasio', 'futbol', 'piscina']);
+  ok('pasaporte: 4 sellos numerados en orden, con fecha, hora y actividad');
 
   console.log('Ranking y seguridad');
   const b = await client('b');
